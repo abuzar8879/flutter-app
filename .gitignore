@@ -1,0 +1,14 @@
+# Backend — never commit dependencies (causes broken/incomplete packages on deploy)
+backend/node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
