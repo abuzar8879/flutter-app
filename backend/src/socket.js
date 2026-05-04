@@ -36,7 +36,7 @@ function initializeSocket(server) {
   });
 
   io.on('connection', (socket) => {
-    const userId = Number(socket.user.sub);
+    const userId = String(socket.user.sub);
     socket.join(userRoom(userId));
 
     // Join group rooms for accepted memberships
@@ -75,7 +75,7 @@ function initializeSocket(server) {
 
     socket.on('typing', (payload) => {
       if (payload && payload.receiverId) {
-        io.to(userRoom(Number(payload.receiverId))).emit('user_typing', {
+        io.to(userRoom(String(payload.receiverId))).emit('user_typing', {
           conversationId: payload.conversationId,
           userId,
         });
@@ -84,7 +84,7 @@ function initializeSocket(server) {
 
     socket.on('stop_typing', (payload) => {
       if (payload && payload.receiverId) {
-        io.to(userRoom(Number(payload.receiverId))).emit('user_stop_typing', {
+        io.to(userRoom(String(payload.receiverId))).emit('user_stop_typing', {
           conversationId: payload.conversationId,
           userId,
         });
@@ -95,7 +95,7 @@ function initializeSocket(server) {
       if (payload && payload.conversationId && payload.senderId) {
         try {
           await chatsService.markConversationRead(userId, payload.conversationId);
-          io.to(userRoom(Number(payload.senderId))).emit('messages_read', {
+          io.to(userRoom(String(payload.senderId))).emit('messages_read', {
             conversationId: payload.conversationId,
             readerId: userId,
           });
@@ -110,7 +110,7 @@ function initializeSocket(server) {
     // -----------------------
     socket.on('send_group_message', async (payload, callback) => {
       try {
-        const groupId = Number(payload?.groupId);
+        const groupId = String(payload?.groupId ?? '');
         if (!groupId) throw new Error('groupId is required.');
         const result = await groupsService.sendMessage(userId, groupId, payload ?? {});
         const eventPayload = {
@@ -136,7 +136,7 @@ function initializeSocket(server) {
     });
 
     socket.on('group_typing', (payload) => {
-      const groupId = Number(payload?.groupId);
+      const groupId = String(payload?.groupId ?? '');
       if (!groupId) return;
       const eventPayload = { groupId, userId };
       io.to(groupRoom(groupId)).emit('group_user_typing', eventPayload);
@@ -154,7 +154,7 @@ function initializeSocket(server) {
     });
 
     socket.on('group_stop_typing', (payload) => {
-      const groupId = Number(payload?.groupId);
+      const groupId = String(payload?.groupId ?? '');
       if (!groupId) return;
       const eventPayload = { groupId, userId };
       io.to(groupRoom(groupId)).emit('group_user_stop_typing', eventPayload);
@@ -172,8 +172,8 @@ function initializeSocket(server) {
     });
 
     socket.on('mark_group_read', async (payload) => {
-      const groupId = Number(payload?.groupId);
-      const lastReadMessageId = Number(payload?.lastReadMessageId);
+      const groupId = String(payload?.groupId ?? '');
+      const lastReadMessageId = String(payload?.lastReadMessageId ?? '');
       if (!groupId || !lastReadMessageId) return;
       try {
         await groupsService.markRead(userId, groupId, lastReadMessageId);
@@ -195,7 +195,7 @@ function initializeSocket(server) {
 
     socket.on('join_group', async (payload, callback) => {
       try {
-        const groupId = Number(payload?.groupId);
+        const groupId = String(payload?.groupId ?? '');
         if (!groupId) throw new Error('groupId is required.');
         // Will throw if not accepted member
         await groupsService.getGroupMembers(userId, groupId);

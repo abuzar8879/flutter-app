@@ -1,45 +1,74 @@
-const { pool } = require('../../db/pool');
 const { mapUser } = require('../users/user.mapper');
+const {
+  ensureStringId,
+  normalizeEmail,
+  nowIso,
+  getValue,
+  setValue,
+  pushChild,
+} = require('../../db/rtdb');
 
 async function createUser({ name, email, passwordHash }) {
-  const result = await pool.query(
-    `
-      INSERT INTO users (name, email, password_hash)
-      VALUES ($1, $2, $3)
-      RETURNING id, name, email, avatar_path, public_key, created_at, updated_at
-    `,
-    [name, email.toLowerCase(), passwordHash],
-  );
+  const emailLower = normalizeEmail(email);
+  if (!emailLower) throw new Error('Email is required.');
 
-  return mapUser(result.rows[0]);
+  // Enforce uniqueness via index node
+  const existing = await getValue(`/emailToUserId/${encodeURIComponent(emailLower)}`);
+  if (existing) {
+    const error = new Error('Email already exists.');
+    error.code = 'EMAIL_EXISTS';
+    throw error;
+  }
+
+  const { key: userId } = await pushChild('/users', {});
+  ensureStringId(userId, 'userId');
+
+  const timestamp = nowIso();
+  const user = {
+    id: userId,
+    name,
+    email: emailLower,
+    emailLower,
+    passwordHash,
+    avatarPath: null,
+    publicKey: null,
+    fcmToken: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await setValue(`/users/${userId}`, user);
+  await setValue(`/emailToUserId/${encodeURIComponent(emailLower)}`, userId);
+
+  return mapUser(user);
 }
 
 async function findUserByEmail(email) {
-  const result = await pool.query(
-    `
-      SELECT id, name, email, password_hash, avatar_path, public_key, created_at, updated_at
-      FROM users
-      WHERE LOWER(email) = LOWER($1)
-      LIMIT 1
-    `,
-    [email],
-  );
+  const emailLower = normalizeEmail(email);
+  if (!emailLower) return null;
 
-  return result.rows[0] ?? null;
+  const userId = await getValue(`/emailToUserId/${encodeURIComponent(emailLower)}`);
+  if (!userId) return null;
+
+  const user = await getValue(`/users/${userId}`);
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    password_hash: user.passwordHash,
+    avatar_path: user.avatarPath,
+    public_key: user.publicKey,
+    created_at: user.createdAt,
+    updated_at: user.updatedAt,
+  };
 }
 
 async function findUserById(id) {
-  const result = await pool.query(
-    `
-      SELECT id, name, email, avatar_path, public_key, created_at, updated_at
-      FROM users
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [id],
-  );
-
-  return result.rows[0] ? mapUser(result.rows[0]) : null;
+  const userId = ensureStringId(String(id), 'userId');
+  const user = await getValue(`/users/${userId}`);
+  return user ? mapUser(user) : null;
 }
 
 module.exports = {

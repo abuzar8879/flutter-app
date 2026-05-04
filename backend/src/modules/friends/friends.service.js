@@ -3,8 +3,8 @@ const usersRepository = require('../users/users.repository');
 const friendsRepository = require('./friends.repository');
 
 async function sendRequest(senderId, receiverId) {
-  senderId = Number(senderId);
-  receiverId = Number(receiverId);
+  senderId = String(senderId);
+  receiverId = String(receiverId);
 
   if (senderId === receiverId) {
     throw new AppError('You cannot send a friend request to yourself.', 400);
@@ -41,7 +41,7 @@ async function sendRequest(senderId, receiverId) {
 }
 
 async function respondToRequest(requestId, receiverId, action) {
-  receiverId = Number(receiverId);
+  receiverId = String(receiverId);
 
   if (!['accepted', 'rejected'].includes(action)) {
     throw new AppError('Action must be accepted or rejected.', 400);
@@ -56,11 +56,11 @@ async function respondToRequest(requestId, receiverId, action) {
 }
 
 async function getPendingRequests(userId) {
-  return friendsRepository.findPendingRequestsForUser(Number(userId));
+  return friendsRepository.findPendingRequestsForUser(String(userId));
 }
 
 async function getMyFriends(userId) {
-  return friendsRepository.findAcceptedFriends(Number(userId));
+  return friendsRepository.findAcceptedFriends(String(userId));
 }
 
 module.exports = {

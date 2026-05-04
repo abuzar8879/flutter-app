@@ -4,9 +4,9 @@ const usersRepository = require('../users/users.repository');
 const groupsRepository = require('./groups.repository');
 
 async function createGroup(creatorId, { name, inviteeIds }) {
-  creatorId = Number(creatorId);
+  creatorId = String(creatorId);
   const normalizedInvitees = Array.isArray(inviteeIds)
-    ? [...new Set(inviteeIds.map(Number))].filter((id) => id > 0 && id !== creatorId)
+    ? [...new Set(inviteeIds.map(String))].filter((id) => id && id !== creatorId)
     : [];
 
   const group = await groupsRepository.createGroup({ name, createdBy: creatorId });
@@ -42,34 +42,34 @@ async function createGroup(creatorId, { name, inviteeIds }) {
 }
 
 async function listGroups(userId, query = {}) {
-  userId = Number(userId);
+  userId = String(userId);
   const limit = Math.min(Number(query.limit) || 30, 100);
   const offset = Math.max(Number(query.offset) || 0, 0);
   return groupsRepository.listGroupsForUser(userId, { limit, offset });
 }
 
 async function listInvites(userId) {
-  return groupsRepository.listInvitesForUser(Number(userId));
+  return groupsRepository.listInvitesForUser(String(userId));
 }
 
 async function acceptInvite(userId, groupId) {
-  userId = Number(userId);
-  groupId = Number(groupId);
+  userId = String(userId);
+  groupId = String(groupId);
   const updated = await groupsRepository.acceptInvite({ groupId, userId });
   if (!updated) throw new AppError('Invite not found.', 404);
   return updated;
 }
 
 async function rejectInvite(userId, groupId) {
-  userId = Number(userId);
-  groupId = Number(groupId);
+  userId = String(userId);
+  groupId = String(groupId);
   const removed = await groupsRepository.rejectInvite({ groupId, userId });
   if (!removed) throw new AppError('Invite not found.', 404);
   return removed;
 }
 
 async function _requireAcceptedMember(groupId, userId) {
-  const membership = await groupsRepository.getMembership(Number(groupId), Number(userId));
+  const membership = await groupsRepository.getMembership(String(groupId), String(userId));
   if (!membership || membership.status !== 'accepted') {
     throw new AppError('You are not a member of this group.', 403);
   }
@@ -86,16 +86,16 @@ async function _requireAdmin(groupId, userId) {
 
 async function getGroupMembers(userId, groupId) {
   await _requireAcceptedMember(groupId, userId);
-  return groupsRepository.listMembers(Number(groupId));
+  return groupsRepository.listMembers(String(groupId));
 }
 
 async function inviteMembers(adminId, groupId, { inviteeIds }) {
-  adminId = Number(adminId);
-  groupId = Number(groupId);
+  adminId = String(adminId);
+  groupId = String(groupId);
   await _requireAdmin(groupId, adminId);
 
   const normalizedInvitees = Array.isArray(inviteeIds)
-    ? [...new Set(inviteeIds.map(Number))].filter((id) => id > 0 && id !== adminId)
+    ? [...new Set(inviteeIds.map(String))].filter((id) => id && id !== adminId)
     : [];
 
   const invited = [];
@@ -121,9 +121,9 @@ async function inviteMembers(adminId, groupId, { inviteeIds }) {
 }
 
 async function removeMember(adminId, groupId, memberUserId) {
-  adminId = Number(adminId);
-  groupId = Number(groupId);
-  memberUserId = Number(memberUserId);
+  adminId = String(adminId);
+  groupId = String(groupId);
+  memberUserId = String(memberUserId);
   await _requireAdmin(groupId, adminId);
 
   if (adminId === memberUserId) {
@@ -136,18 +136,18 @@ async function removeMember(adminId, groupId, memberUserId) {
 }
 
 async function getMessages(userId, groupId, query = {}) {
-  userId = Number(userId);
-  groupId = Number(groupId);
+  userId = String(userId);
+  groupId = String(groupId);
   await _requireAcceptedMember(groupId, userId);
 
   const limit = Math.min(Number(query.limit) || 50, 200);
-  const beforeId = query.beforeId ? Number(query.beforeId) : undefined;
+  const beforeId = query.beforeId ? String(query.beforeId) : undefined;
   return groupsRepository.listGroupMessages(groupId, { limit, beforeId });
 }
 
 async function sendMessage(userId, groupId, payload = {}) {
-  userId = Number(userId);
-  groupId = Number(groupId);
+  userId = String(userId);
+  groupId = String(groupId);
   await _requireAcceptedMember(groupId, userId);
 
   const type = payload.type ?? 'text';
@@ -170,10 +170,10 @@ async function sendMessage(userId, groupId, payload = {}) {
 }
 
 async function markRead(userId, groupId, lastReadMessageId) {
-  userId = Number(userId);
-  groupId = Number(groupId);
-  lastReadMessageId = Number(lastReadMessageId);
-  if (!lastReadMessageId || lastReadMessageId <= 0) {
+  userId = String(userId);
+  groupId = String(groupId);
+  lastReadMessageId = String(lastReadMessageId);
+  if (!lastReadMessageId) {
     throw new AppError('lastReadMessageId is required.', 400);
   }
 
@@ -183,7 +183,7 @@ async function markRead(userId, groupId, lastReadMessageId) {
 }
 
 async function listAcceptedGroupIds(userId) {
-  return groupsRepository.listAcceptedGroupIdsForUser(Number(userId));
+  return groupsRepository.listAcceptedGroupIdsForUser(String(userId));
 }
 
 module.exports = {

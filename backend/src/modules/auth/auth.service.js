@@ -68,7 +68,7 @@ async function login(payload) {
   }
 
   return buildAuthResponse({
-    id: user.id,
+    id: String(user.id),
     name: user.name,
     email: user.email,
     avatarPath: user.avatar_path,
@@ -79,7 +79,7 @@ async function login(payload) {
 }
 
 async function getCurrentUser(userId) {
-  const user = await authRepository.findUserById(Number(userId));
+  const user = await authRepository.findUserById(String(userId));
   if (!user) {
     throw new AppError('User not found.', 404);
   }

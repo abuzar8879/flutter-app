@@ -1,32 +1,32 @@
 function mapConversation(row) {
   return {
-    id: Number(row.id),
-    userOneId: Number(row.user_one_id),
-    userTwoId: Number(row.user_two_id),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    id: String(row.id),
+    userOneId: String(row.userOneId ?? row.user_one_id),
+    userTwoId: String(row.userTwoId ?? row.user_two_id),
+    createdAt: row.createdAt ?? row.created_at ?? null,
+    updatedAt: row.updatedAt ?? row.updated_at ?? null,
   };
 }
 
 function mapMessage(row) {
   return {
-    id: Number(row.id),
-    conversationId: Number(row.conversation_id),
-    senderId: Number(row.sender_id),
-    receiverId: Number(row.receiver_id),
+    id: String(row.id),
+    conversationId: String(row.conversationId ?? row.conversation_id),
+    senderId: String(row.senderId ?? row.sender_id),
+    receiverId: String(row.receiverId ?? row.receiver_id),
     type: row.type,
     content: row.content,
-    imagePath: row.image_path,
-    readAt: row.read_at,
-    createdAt: row.created_at,
+    imagePath: row.imagePath ?? row.image_path ?? null,
+    readAt: row.readAt ?? row.read_at ?? null,
+    createdAt: row.createdAt ?? row.created_at ?? null,
   };
 }
 
 function mapConversationSummary(row) {
   return {
-    id: Number(row.id),
+    id: String(row.id),
     friend: {
-      id: Number(row.friend_id),
+      id: String(row.friend_id),
       name: row.friend_name,
       email: row.friend_email,
       avatarPath: row.friend_avatar_path,
@@ -34,10 +34,10 @@ function mapConversationSummary(row) {
     },
     lastMessage: row.message_id
       ? {
-          id: Number(row.message_id),
-          conversationId: Number(row.id),
-          senderId: Number(row.message_sender_id),
-          receiverId: Number(row.message_receiver_id),
+          id: String(row.message_id),
+          conversationId: String(row.id),
+          senderId: String(row.message_sender_id),
+          receiverId: String(row.message_receiver_id),
           type: row.message_type,
           content: row.message_content,
           imagePath: row.message_image_path,
@@ -46,7 +46,7 @@ function mapConversationSummary(row) {
         }
       : null,
     unreadCount: Number(row.unread_count ?? 0),
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at ?? null,
   };
 }
 

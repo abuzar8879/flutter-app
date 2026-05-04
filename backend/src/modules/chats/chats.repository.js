@@ -1,157 +1,151 @@
-const { pool } = require('../../db/pool');
 const { mapConversation, mapConversationSummary, mapMessage } = require('./chat.mapper');
+const { ensureStringId, pairKey, nowIso, getValue, setValue, updateValue, pushChild } = require('../../db/rtdb');
 
 function normalizePair(userAId, userBId) {
-  const first = Number(userAId);
-  const second = Number(userBId);
+  const first = ensureStringId(String(userAId), 'userAId');
+  const second = ensureStringId(String(userBId), 'userBId');
   return first < second ? [first, second] : [second, first];
 }
 
 async function findConversationBetween(userAId, userBId) {
   const [userOneId, userTwoId] = normalizePair(userAId, userBId);
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM conversations
-      WHERE user_one_id = $1 AND user_two_id = $2
-      LIMIT 1
-    `,
-    [userOneId, userTwoId],
-  );
-
-  return result.rows[0] ? mapConversation(result.rows[0]) : null;
+  const key = pairKey(userOneId, userTwoId);
+  const conversationId = await getValue(`/conversationByPair/${encodeURIComponent(key)}`);
+  if (!conversationId) return null;
+  const conversation = await getValue(`/conversations/${conversationId}`);
+  return conversation ? mapConversation(conversation) : null;
 }
 
 async function createConversation(userAId, userBId) {
   const [userOneId, userTwoId] = normalizePair(userAId, userBId);
-  const result = await pool.query(
-    `
-      INSERT INTO conversations (user_one_id, user_two_id)
-      VALUES ($1, $2)
-      ON CONFLICT (user_one_id, user_two_id)
-      DO UPDATE SET updated_at = conversations.updated_at
-      RETURNING *
-    `,
-    [userOneId, userTwoId],
-  );
+  const key = pairKey(userOneId, userTwoId);
+  const existingId = await getValue(`/conversationByPair/${encodeURIComponent(key)}`);
+  if (existingId) {
+    const existing = await getValue(`/conversations/${existingId}`);
+    return existing ? mapConversation(existing) : null;
+  }
 
-  return mapConversation(result.rows[0]);
+  const timestamp = nowIso();
+  const { key: conversationId } = await pushChild('/conversations', {});
+  const conversation = {
+    id: conversationId,
+    userOneId,
+    userTwoId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await setValue(`/conversations/${conversationId}`, conversation);
+  await setValue(`/conversationByPair/${encodeURIComponent(key)}`, conversationId);
+  return mapConversation(conversation);
 }
 
 async function findConversationForUser(conversationId, userId) {
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM conversations
-      WHERE id = $1
-        AND (user_one_id = $2 OR user_two_id = $2)
-      LIMIT 1
-    `,
-    [conversationId, userId],
-  );
-
-  return result.rows[0] ? mapConversation(result.rows[0]) : null;
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const convo = await getValue(`/conversations/${cid}`);
+  if (!convo) return null;
+  if (String(convo.userOneId) !== uid && String(convo.userTwoId) !== uid) return null;
+  return mapConversation(convo);
 }
 
 async function createMessage({ conversationId, senderId, receiverId, type, content, imagePath }) {
-  const result = await pool.query(
-    `
-      INSERT INTO messages (conversation_id, sender_id, receiver_id, type, content, image_path)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *
-    `,
-    [conversationId, senderId, receiverId, type, content, imagePath],
-  );
-
-  await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [
-    conversationId,
-  ]);
-
-  return mapMessage(result.rows[0]);
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const sid = ensureStringId(String(senderId), 'senderId');
+  const rid = ensureStringId(String(receiverId), 'receiverId');
+  const timestamp = nowIso();
+  const { key: messageId } = await pushChild(`/messages/${cid}`, {});
+  const message = {
+    id: messageId,
+    conversationId: cid,
+    senderId: sid,
+    receiverId: rid,
+    type,
+    content: content ?? null,
+    imagePath: imagePath ?? null,
+    readAt: null,
+    createdAt: timestamp,
+  };
+  await setValue(`/messages/${cid}/${messageId}`, message);
+  await updateValue(`/conversations/${cid}`, { updatedAt: timestamp });
+  return mapMessage(message);
 }
 
 async function findMessagesForConversation(conversationId, { limit = 50, beforeId } = {}) {
-  const params = [conversationId, limit];
-  let paginationClause = '';
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const all = (await getValue(`/messages/${cid}`)) ?? {};
+  const messages = Object.values(all)
+    .filter(Boolean)
+    .sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')))
+    .map(mapMessage);
+
   if (beforeId) {
-    params.push(beforeId);
-    paginationClause = `AND id < $${params.length}`;
+    const idx = messages.findIndex((m) => m.id === String(beforeId));
+    const slice = idx > 0 ? messages.slice(0, idx) : messages;
+    return slice.slice(Math.max(slice.length - limit, 0));
   }
 
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM messages
-      WHERE conversation_id = $1
-        ${paginationClause}
-      ORDER BY id DESC
-      LIMIT $2
-    `,
-    params,
-  );
-
-  return result.rows.reverse().map(mapMessage);
+  return messages.slice(Math.max(messages.length - limit, 0));
 }
 
 async function findConversationSummaries(userId, { limit = 30, offset = 0 } = {}) {
-  const result = await pool.query(
-    `
-      SELECT
-        c.*,
-        friend.id AS friend_id,
-        friend.name AS friend_name,
-        friend.email AS friend_email,
-        friend.avatar_path AS friend_avatar_path,
-        friend.public_key AS friend_public_key,
-        last_message.id AS message_id,
-        last_message.sender_id AS message_sender_id,
-        last_message.receiver_id AS message_receiver_id,
-        last_message.type AS message_type,
-        last_message.content AS message_content,
-        last_message.image_path AS message_image_path,
-        last_message.read_at AS message_read_at,
-        last_message.created_at AS message_created_at,
-        COALESCE(unread.count, 0) AS unread_count
-      FROM conversations c
-      JOIN users friend ON friend.id = CASE
-        WHEN c.user_one_id = $1 THEN c.user_two_id
-        ELSE c.user_one_id
-      END
-      LEFT JOIN LATERAL (
-        SELECT *
-        FROM messages m
-        WHERE m.conversation_id = c.id
-        ORDER BY m.created_at DESC, m.id DESC
-        LIMIT 1
-      ) last_message ON true
-      LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS count
-        FROM messages m
-        WHERE m.conversation_id = c.id
-          AND m.receiver_id = $1
-          AND m.read_at IS NULL
-      ) unread ON true
-      WHERE c.user_one_id = $1 OR c.user_two_id = $1
-      ORDER BY COALESCE(last_message.created_at, c.updated_at) DESC, c.id DESC
-      LIMIT $2 OFFSET $3
-    `,
-    [userId, limit, offset],
-  );
+  const uid = ensureStringId(String(userId), 'userId');
+  const conversations = (await getValue('/conversations')) ?? {};
+  const users = (await getValue('/users')) ?? {};
 
-  return result.rows.map(mapConversationSummary);
+  const summaries = [];
+  for (const convo of Object.values(conversations)) {
+    if (!convo) continue;
+    if (String(convo.userOneId) !== uid && String(convo.userTwoId) !== uid) continue;
+
+    const friendId = String(convo.userOneId) === uid ? String(convo.userTwoId) : String(convo.userOneId);
+    const friend = users[friendId];
+
+    const msgs = (await getValue(`/messages/${convo.id}`)) ?? {};
+    const msgList = Object.values(msgs).filter(Boolean);
+    msgList.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+    const last = msgList[0] ?? null;
+    const unreadCount = msgList.filter((m) => String(m.receiverId) === uid && !m.readAt).length;
+
+    summaries.push(
+      mapConversationSummary({
+        id: convo.id,
+        updated_at: convo.updatedAt,
+        friend_id: friendId,
+        friend_name: friend?.name,
+        friend_email: friend?.email,
+        friend_avatar_path: friend?.avatarPath ?? null,
+        friend_public_key: friend?.publicKey ?? null,
+        message_id: last?.id ?? null,
+        message_sender_id: last?.senderId ?? null,
+        message_receiver_id: last?.receiverId ?? null,
+        message_type: last?.type ?? null,
+        message_content: last?.content ?? null,
+        message_image_path: last?.imagePath ?? null,
+        message_read_at: last?.readAt ?? null,
+        message_created_at: last?.createdAt ?? null,
+        unread_count: unreadCount,
+      }),
+    );
+  }
+
+  summaries.sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  return summaries.slice(offset, offset + limit);
 }
 
 async function markConversationRead(conversationId, userId) {
-  await pool.query(
-    `
-      UPDATE messages
-      SET read_at = NOW()
-      WHERE conversation_id = $1
-        AND receiver_id = $2
-        AND read_at IS NULL
-    `,
-    [conversationId, userId],
-  );
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const all = (await getValue(`/messages/${cid}`)) ?? {};
+  const timestamp = nowIso();
+  const updates = {};
+  for (const [mid, m] of Object.entries(all)) {
+    if (!m) continue;
+    if (String(m.receiverId) === uid && !m.readAt) {
+      updates[`/messages/${cid}/${mid}/readAt`] = timestamp;
+    }
+  }
+  const { getDatabase } = require('../../db/rtdb');
+  await getDatabase().ref().update(updates);
 }
 
 module.exports = {

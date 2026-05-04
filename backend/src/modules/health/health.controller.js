@@ -1,15 +1,13 @@
 const env = require('../../config/env');
-const { verifyDatabaseConnection } = require('../../db/pool');
+const { getFirebaseInitStatus } = require('../../config/firebase');
 
 async function getHealth(_request, response, next) {
   try {
-    const database = await verifyDatabaseConnection();
-
     response.status(200).json({
       message: 'Chat backend is running.',
       environment: env.nodeEnv,
       timestamp: new Date().toISOString(),
-      database,
+      firebase: getFirebaseInitStatus(),
     });
   } catch (error) {
     next(error);

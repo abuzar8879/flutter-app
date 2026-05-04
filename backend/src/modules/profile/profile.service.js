@@ -2,7 +2,7 @@ const AppError = require('../../utils/app-error');
 const profileRepository = require('./profile.repository');
 
 async function getProfile(userId) {
-  const profile = await profileRepository.findProfileByUserId(Number(userId));
+  const profile = await profileRepository.findProfileByUserId(String(userId));
   if (!profile) {
     throw new AppError('User profile not found.', 404);
   }
@@ -15,7 +15,7 @@ async function updateProfile(userId, payload) {
     throw new AppError('Name is required.', 400);
   }
 
-  const profile = await profileRepository.updateProfile(Number(userId), {
+  const profile = await profileRepository.updateProfile(String(userId), {
     name: payload.name.trim(),
   });
 
@@ -32,7 +32,7 @@ async function updateProfileImage(userId, file) {
   }
 
   const avatarPath = `/uploads/profile/${file.filename}`;
-  const profile = await profileRepository.updateProfileImage(Number(userId), avatarPath);
+  const profile = await profileRepository.updateProfileImage(String(userId), avatarPath);
 
   if (!profile) {
     throw new AppError('User profile not found.', 404);

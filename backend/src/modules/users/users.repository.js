@@ -1,61 +1,42 @@
-const { pool } = require('../../db/pool');
 const { mapUser } = require('./user.mapper');
+const { ensureStringId, getValue, updateValue } = require('../../db/rtdb');
 
 async function findAllUsers({ excludeId, search, limit = 50, offset = 0 }) {
-  let query = `
-    SELECT id, name, email, avatar_path, public_key, fcm_token, created_at, updated_at
-    FROM users
-    WHERE id != $1
-  `;
-  const params = [excludeId];
+  const excludeUserId = excludeId ? String(excludeId) : '';
+  const all = (await getValue('/users')) ?? {};
+  const searchTerm = search && search.trim() ? search.trim().toLowerCase() : '';
 
-  if (search && search.trim()) {
-    params.push(`%${search.trim().toLowerCase()}%`);
-    query += ` AND (LOWER(name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length})`;
-  }
+  const users = Object.values(all)
+    .filter(Boolean)
+    .filter((u) => !excludeUserId || String(u.id) !== excludeUserId)
+    .filter((u) => {
+      if (!searchTerm) return true;
+      const name = String(u.name ?? '').toLowerCase();
+      const email = String(u.email ?? '').toLowerCase();
+      return name.includes(searchTerm) || email.includes(searchTerm);
+    })
+    .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
+    .slice(offset, offset + limit);
 
-  params.push(limit, offset);
-  query += ` ORDER BY name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`;
-
-  const result = await pool.query(query, params);
-  return result.rows.map(mapUser);
+  return users.map(mapUser);
 }
 
 async function findUserById(id) {
-  const result = await pool.query(
-    `
-      SELECT id, name, email, avatar_path, public_key, fcm_token, created_at, updated_at
-      FROM users
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [id],
-  );
-  return result.rows[0] ? mapUser(result.rows[0]) : null;
+  const userId = ensureStringId(String(id), 'userId');
+  const user = await getValue(`/users/${userId}`);
+  return user ? mapUser(user) : null;
 }
 
 async function updatePublicKey(userId, publicKey) {
-  const result = await pool.query(
-    `
-      UPDATE users
-      SET public_key = $2, updated_at = NOW()
-      WHERE id = $1
-      RETURNING id, name, email, avatar_path, public_key, fcm_token, created_at, updated_at
-    `,
-    [userId, publicKey],
-  );
-  return result.rows[0] ? mapUser(result.rows[0]) : null;
+  const id = ensureStringId(String(userId), 'userId');
+  await updateValue(`/users/${id}`, { publicKey, updatedAt: new Date().toISOString() });
+  const updated = await getValue(`/users/${id}`);
+  return updated ? mapUser(updated) : null;
 }
 
 async function updateFcmToken(userId, fcmToken) {
-  await pool.query(
-    `
-      UPDATE users
-      SET fcm_token = $2, updated_at = NOW()
-      WHERE id = $1
-    `,
-    [userId, fcmToken],
-  );
+  const id = ensureStringId(String(userId), 'userId');
+  await updateValue(`/users/${id}`, { fcmToken, updatedAt: new Date().toISOString() });
 }
 
 module.exports = {

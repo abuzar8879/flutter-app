@@ -1,17 +1,17 @@
-const { pool } = require('../../db/pool');
 const { mapUser } = require('../users/user.mapper');
+const { ensureStringId, getValue, setValue, updateValue, removeValue, nowIso, pushChild } = require('../../db/rtdb');
 
 function mapRequest(row) {
   return {
-    id: Number(row.id),
-    senderId: Number(row.sender_id),
-    receiverId: Number(row.receiver_id),
+    id: String(row.id),
+    senderId: String(row.senderId ?? row.sender_id),
+    receiverId: String(row.receiverId ?? row.receiver_id),
     status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.createdAt ?? row.created_at ?? null,
+    updatedAt: row.updatedAt ?? row.updated_at ?? null,
     sender: row.sender_name
       ? {
-          id: Number(row.sender_id),
+          id: String(row.sender_id),
           name: row.sender_name,
           email: row.sender_email,
           avatarPath: row.sender_avatar_path,
@@ -19,7 +19,7 @@ function mapRequest(row) {
       : undefined,
     receiver: row.receiver_name
       ? {
-          id: Number(row.receiver_id),
+          id: String(row.receiver_id),
           name: row.receiver_name,
           email: row.receiver_email,
           avatarPath: row.receiver_avatar_path,
@@ -30,119 +30,102 @@ function mapRequest(row) {
 
 /** Find existing request between two users (any direction) */
 async function findRequestBetween(userAId, userBId) {
-  const result = await pool.query(
-    `
-      SELECT * FROM friend_requests
-      WHERE (sender_id = $1 AND receiver_id = $2)
-         OR (sender_id = $2 AND receiver_id = $1)
-      LIMIT 1
-    `,
-    [userAId, userBId],
+  const a = ensureStringId(String(userAId), 'userAId');
+  const b = ensureStringId(String(userBId), 'userBId');
+  const all = (await getValue('/friendRequests')) ?? {};
+  const found = Object.values(all).find(
+    (r) =>
+      r &&
+      ((String(r.senderId) === a && String(r.receiverId) === b) ||
+        (String(r.senderId) === b && String(r.receiverId) === a)),
   );
-  return result.rows[0] ? mapRequest(result.rows[0]) : null;
+  return found ? mapRequest(found) : null;
 }
 
 /** Create a new pending friend request */
 async function createRequest(senderId, receiverId) {
-  const result = await pool.query(
-    `
-      INSERT INTO friend_requests (sender_id, receiver_id, status)
-      VALUES ($1, $2, 'pending')
-      RETURNING *
-    `,
-    [senderId, receiverId],
-  );
-  return mapRequest(result.rows[0]);
+  const sender = ensureStringId(String(senderId), 'senderId');
+  const receiver = ensureStringId(String(receiverId), 'receiverId');
+  const timestamp = nowIso();
+  const { key: requestId } = await pushChild('/friendRequests', {});
+  const request = {
+    id: requestId,
+    senderId: sender,
+    receiverId: receiver,
+    status: 'pending',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await setValue(`/friendRequests/${requestId}`, request);
+  return mapRequest(request);
 }
 
 /** Update status of a request by id */
 async function updateRequestStatus(requestId, receiverId, status) {
-  const result = await pool.query(
-    `
-      UPDATE friend_requests
-      SET status = $3, updated_at = NOW()
-      WHERE id = $1 AND receiver_id = $2
-        AND status = 'pending'
-      RETURNING *
-    `,
-    [requestId, receiverId, status],
-  );
-  return result.rows[0] ? mapRequest(result.rows[0]) : null;
+  const id = ensureStringId(String(requestId), 'requestId');
+  const receiver = ensureStringId(String(receiverId), 'receiverId');
+  const req = await getValue(`/friendRequests/${id}`);
+  if (!req) return null;
+  if (String(req.receiverId) !== receiver) return null;
+  if (req.status !== 'pending') return null;
+
+  await updateValue(`/friendRequests/${id}`, { status, updatedAt: nowIso() });
+  const updated = await getValue(`/friendRequests/${id}`);
+  return updated ? mapRequest(updated) : null;
 }
 
 /** Get all PENDING requests received by a user (with sender info) */
 async function findPendingRequestsForUser(userId) {
-  const result = await pool.query(
-    `
-      SELECT
-        fr.*,
-        u.name  AS sender_name,
-        u.email AS sender_email,
-        u.avatar_path AS sender_avatar_path
-      FROM friend_requests fr
-      JOIN users u ON u.id = fr.sender_id
-      WHERE fr.receiver_id = $1
-        AND fr.status = 'pending'
-      ORDER BY fr.created_at DESC
-    `,
-    [userId],
-  );
-  return result.rows.map(mapRequest);
+  const id = ensureStringId(String(userId), 'userId');
+  const all = (await getValue('/friendRequests')) ?? {};
+  const users = (await getValue('/users')) ?? {};
+  return Object.values(all)
+    .filter((r) => r && String(r.receiverId) === id && r.status === 'pending')
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+    .map((r) => {
+      const sender = users[r.senderId];
+      return mapRequest({
+        ...r,
+        sender_id: r.senderId,
+        sender_name: sender?.name,
+        sender_email: sender?.email,
+        sender_avatar_path: sender?.avatarPath ?? null,
+      });
+    });
 }
 
 /** Get all ACCEPTED friends of a user (returns the OTHER user's details) */
 async function findAcceptedFriends(userId) {
-  const result = await pool.query(
-    `
-      SELECT
-        u.id,
-        u.name,
-        u.email,
-        u.avatar_path,
-        u.public_key,
-        u.created_at,
-        u.updated_at
-      FROM friend_requests fr
-      JOIN users u ON (
-        CASE
-          WHEN fr.sender_id = $1 THEN u.id = fr.receiver_id
-          ELSE u.id = fr.sender_id
-        END
-      )
-      WHERE (fr.sender_id = $1 OR fr.receiver_id = $1)
-        AND fr.status = 'accepted'
-      ORDER BY u.name ASC
-    `,
-    [userId],
-  );
-  return result.rows.map(mapUser);
+  const id = ensureStringId(String(userId), 'userId');
+  const all = (await getValue('/friendRequests')) ?? {};
+  const users = (await getValue('/users')) ?? {};
+  const friendUsers = Object.values(all)
+    .filter((r) => r && r.status === 'accepted' && (String(r.senderId) === id || String(r.receiverId) === id))
+    .map((r) => (String(r.senderId) === id ? String(r.receiverId) : String(r.senderId)))
+    .map((friendId) => users[friendId])
+    .filter(Boolean)
+    .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
+
+  return friendUsers.map(mapUser);
 }
 
 /** Re-open: delete a rejected request so the sender can try again */
 async function deleteRequest(senderId, receiverId) {
-  await pool.query(
-    `
-      DELETE FROM friend_requests
-      WHERE sender_id = $1 AND receiver_id = $2
-        AND status = 'rejected'
-    `,
-    [senderId, receiverId],
+  const sender = ensureStringId(String(senderId), 'senderId');
+  const receiver = ensureStringId(String(receiverId), 'receiverId');
+  const all = (await getValue('/friendRequests')) ?? {};
+  const entry = Object.values(all).find(
+    (r) => r && String(r.senderId) === sender && String(r.receiverId) === receiver && r.status === 'rejected',
   );
+  if (entry?.id) {
+    await removeValue(`/friendRequests/${entry.id}`);
+  }
 }
 
 /** Check if two users are accepted friends */
 async function areFriends(userAId, userBId) {
-  const result = await pool.query(
-    `
-      SELECT 1 FROM friend_requests
-      WHERE ((sender_id = $1 AND receiver_id = $2)
-          OR (sender_id = $2 AND receiver_id = $1))
-        AND status = 'accepted'
-      LIMIT 1
-    `,
-    [userAId, userBId],
-  );
-  return result.rows.length > 0;
+  const req = await findRequestBetween(userAId, userBId);
+  return Boolean(req && req.status === 'accepted');
 }
 
 module.exports = {

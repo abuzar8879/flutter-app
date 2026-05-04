@@ -6,8 +6,8 @@ const chatsRepository = require('./chats.repository');
 const { sendPushNotification } = require('../../config/firebase');
 
 async function getOrCreateConversation(userId, friendId) {
-  userId = Number(userId);
-  friendId = Number(friendId);
+  userId = String(userId);
+  friendId = String(friendId);
 
   if (userId === friendId) {
     throw new AppError('You cannot chat with yourself.', 400);
@@ -27,8 +27,8 @@ async function getOrCreateConversation(userId, friendId) {
 }
 
 async function getMessages(userId, conversationId, query = {}) {
-  userId = Number(userId);
-  conversationId = Number(conversationId);
+  userId = String(userId);
+  conversationId = String(conversationId);
 
   const conversation = await chatsRepository.findConversationForUser(conversationId, userId);
   if (!conversation) {
@@ -36,19 +36,19 @@ async function getMessages(userId, conversationId, query = {}) {
   }
 
   const limit = Math.min(Number(query.limit) || 50, 100);
-  const beforeId = query.beforeId ? Number(query.beforeId) : undefined;
+  const beforeId = query.beforeId ? String(query.beforeId) : undefined;
   return chatsRepository.findMessagesForConversation(conversationId, { limit, beforeId });
 }
 
 async function listConversations(userId, query = {}) {
   const limit = Math.min(Number(query.limit) || 30, 100);
   const offset = Math.max(Number(query.offset) || 0, 0);
-  return chatsRepository.findConversationSummaries(Number(userId), { limit, offset });
+  return chatsRepository.findConversationSummaries(String(userId), { limit, offset });
 }
 
 async function markConversationRead(userId, conversationId) {
-  userId = Number(userId);
-  conversationId = Number(conversationId);
+  userId = String(userId);
+  conversationId = String(conversationId);
 
   const conversation = await chatsRepository.findConversationForUser(conversationId, userId);
   if (!conversation) {
@@ -60,13 +60,13 @@ async function markConversationRead(userId, conversationId) {
 }
 
 async function sendMessage(userId, payload) {
-  const senderId = Number(userId);
-  const receiverId = Number(payload.receiverId);
+  const senderId = String(userId);
+  const receiverId = String(payload.receiverId ?? '');
   const type = ['image', 'encrypted'].includes(payload.type) ? payload.type : 'text';
   const content = typeof payload.content === 'string' ? payload.content.trim() : '';
   const imagePath = typeof payload.imagePath === 'string' ? payload.imagePath.trim() : '';
 
-  if (!receiverId) {
+  if (!receiverId || receiverId === '0') {
     throw new AppError('receiverId is required.', 400);
   }
 

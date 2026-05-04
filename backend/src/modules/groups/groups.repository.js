@@ -1,4 +1,3 @@
-const { pool } = require('../../db/pool');
 const {
   mapGroup,
   mapGroupInvite,
@@ -6,18 +5,21 @@ const {
   mapGroupMessage,
   mapGroupSummary,
 } = require('./group.mapper');
+const { ensureStringId, nowIso, getValue, setValue, updateValue, removeValue, pushChild } = require('../../db/rtdb');
 
 async function createGroup({ name, createdBy }) {
-  const result = await pool.query(
-    `
-      INSERT INTO groups (name, created_by)
-      VALUES ($1, $2)
-      RETURNING *
-    `,
-    [name ?? null, createdBy],
-  );
-
-  return mapGroup(result.rows[0]);
+  const creatorId = ensureStringId(String(createdBy), 'createdBy');
+  const timestamp = nowIso();
+  const { key: groupId } = await pushChild('/groups', {});
+  const group = {
+    id: groupId,
+    name: name ?? '',
+    createdBy: creatorId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await setValue(`/groups/${groupId}`, group);
+  return mapGroup(group);
 }
 
 async function addMember({
@@ -27,242 +29,214 @@ async function addMember({
   status = 'invited',
   invitedBy = null,
 }) {
-  const joinedAt = status === 'accepted' ? new Date() : null;
-  const result = await pool.query(
-    `
-      INSERT INTO group_members (group_id, user_id, role, status, invited_by, invited_at, joined_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), $6)
-      ON CONFLICT (group_id, user_id)
-      DO UPDATE SET
-        role = EXCLUDED.role,
-        status = EXCLUDED.status,
-        invited_by = EXCLUDED.invited_by,
-        invited_at = NOW(),
-        joined_at = CASE WHEN EXCLUDED.status = 'accepted' THEN COALESCE(group_members.joined_at, NOW()) ELSE group_members.joined_at END
-      RETURNING *
-    `,
-    [groupId, userId, role, status, invitedBy, joinedAt],
-  );
-  return mapGroupMember(result.rows[0]);
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const timestamp = nowIso();
+  const member = {
+    groupId: gid,
+    userId: uid,
+    role,
+    status,
+    invitedBy: invitedBy != null ? String(invitedBy) : null,
+    invitedAt: timestamp,
+    joinedAt: status === 'accepted' ? timestamp : null,
+  };
+  await setValue(`/groupMembers/${gid}/${uid}`, member);
+  return mapGroupMember(member);
 }
 
 async function getMembership(groupId, userId) {
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM group_members
-      WHERE group_id = $1 AND user_id = $2
-      LIMIT 1
-    `,
-    [groupId, userId],
-  );
-  return result.rows[0] ? mapGroupMember(result.rows[0]) : null;
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const member = await getValue(`/groupMembers/${gid}/${uid}`);
+  return member ? mapGroupMember(member) : null;
 }
 
 async function acceptInvite({ groupId, userId }) {
-  const result = await pool.query(
-    `
-      UPDATE group_members
-      SET status = 'accepted', joined_at = NOW()
-      WHERE group_id = $1 AND user_id = $2 AND status = 'invited'
-      RETURNING *
-    `,
-    [groupId, userId],
-  );
-  return result.rows[0] ? mapGroupMember(result.rows[0]) : null;
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const member = await getValue(`/groupMembers/${gid}/${uid}`);
+  if (!member || member.status !== 'invited') return null;
+  const timestamp = nowIso();
+  await updateValue(`/groupMembers/${gid}/${uid}`, { status: 'accepted', joinedAt: timestamp });
+  const updated = await getValue(`/groupMembers/${gid}/${uid}`);
+  return updated ? mapGroupMember(updated) : null;
 }
 
 async function rejectInvite({ groupId, userId }) {
-  const result = await pool.query(
-    `
-      DELETE FROM group_members
-      WHERE group_id = $1 AND user_id = $2 AND status = 'invited'
-      RETURNING *
-    `,
-    [groupId, userId],
-  );
-  return result.rows[0] ? mapGroupMember(result.rows[0]) : null;
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const member = await getValue(`/groupMembers/${gid}/${uid}`);
+  if (!member || member.status !== 'invited') return null;
+  await removeValue(`/groupMembers/${gid}/${uid}`);
+  return mapGroupMember(member);
 }
 
 async function removeMember({ groupId, userId }) {
-  const result = await pool.query(
-    `
-      DELETE FROM group_members
-      WHERE group_id = $1 AND user_id = $2
-      RETURNING *
-    `,
-    [groupId, userId],
-  );
-  return result.rows[0] ? mapGroupMember(result.rows[0]) : null;
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const member = await getValue(`/groupMembers/${gid}/${uid}`);
+  if (!member) return null;
+  await removeValue(`/groupMembers/${gid}/${uid}`);
+  return mapGroupMember(member);
 }
 
 async function listInvitesForUser(userId) {
-  const result = await pool.query(
-    `
-      SELECT
-        gm.group_id,
-        gm.invited_by,
-        gm.invited_at,
-        g.name AS group_name,
-        g.created_by AS group_created_by,
-        g.created_at AS group_created_at,
-        u.name AS invited_by_name,
-        u.email AS invited_by_email,
-        u.avatar_path AS invited_by_avatar_path
-      FROM group_members gm
-      JOIN groups g ON g.id = gm.group_id
-      LEFT JOIN users u ON u.id = gm.invited_by
-      WHERE gm.user_id = $1
-        AND gm.status = 'invited'
-      ORDER BY gm.invited_at DESC
-    `,
-    [userId],
-  );
-  return result.rows.map(mapGroupInvite);
+  const uid = ensureStringId(String(userId), 'userId');
+  const membersByGroup = (await getValue('/groupMembers')) ?? {};
+  const groups = (await getValue('/groups')) ?? {};
+  const users = (await getValue('/users')) ?? {};
+
+  const invites = [];
+  for (const [gid, members] of Object.entries(membersByGroup)) {
+    const m = members?.[uid];
+    if (!m || m.status !== 'invited') continue;
+    const g = groups[gid];
+    const inviter = m.invitedBy ? users[m.invitedBy] : null;
+    invites.push(
+      mapGroupInvite({
+        group_id: gid,
+        invited_by: m.invitedBy,
+        invited_at: m.invitedAt,
+        group_name: g?.name,
+        group_created_by: g?.createdBy,
+        group_created_at: g?.createdAt,
+        invited_by_name: inviter?.name,
+        invited_by_email: inviter?.email,
+        invited_by_avatar_path: inviter?.avatarPath ?? null,
+      }),
+    );
+  }
+  invites.sort((a, b) => String(b.invitedAt ?? '').localeCompare(String(a.invitedAt ?? '')));
+  return invites;
 }
 
 async function listAcceptedGroupIdsForUser(userId) {
-  const result = await pool.query(
-    `
-      SELECT group_id
-      FROM group_members
-      WHERE user_id = $1 AND status = 'accepted'
-    `,
-    [userId],
-  );
-  return result.rows.map((r) => Number(r.group_id));
+  const uid = ensureStringId(String(userId), 'userId');
+  const membersByGroup = (await getValue('/groupMembers')) ?? {};
+  return Object.entries(membersByGroup)
+    .filter(([_gid, members]) => members?.[uid]?.status === 'accepted')
+    .map(([gid]) => gid);
 }
 
 async function listGroupsForUser(userId, { limit = 30, offset = 0 } = {}) {
-  const result = await pool.query(
-    `
-      SELECT
-        g.*,
-        last_message.id AS message_id,
-        last_message.sender_id AS message_sender_id,
-        last_message.type AS message_type,
-        last_message.content AS message_content,
-        last_message.image_path AS message_image_path,
-        last_message.created_at AS message_created_at,
-        COALESCE(unread.count, 0) AS unread_count,
-        COALESCE(mcount.count, 0) AS member_count
-      FROM groups g
-      JOIN group_members me
-        ON me.group_id = g.id
-       AND me.user_id = $1
-       AND me.status = 'accepted'
-      LEFT JOIN LATERAL (
-        SELECT *
-        FROM group_messages gm
-        WHERE gm.group_id = g.id
-        ORDER BY gm.created_at DESC, gm.id DESC
-        LIMIT 1
-      ) last_message ON true
-      LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS count
-        FROM group_messages gm
-        LEFT JOIN group_reads gr
-          ON gr.group_id = g.id AND gr.user_id = $1
-        WHERE gm.group_id = g.id
-          AND gm.sender_id <> $1
-          AND (gr.last_read_message_id IS NULL OR gm.id > gr.last_read_message_id)
-      ) unread ON true
-      LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS count
-        FROM group_members gm
-        WHERE gm.group_id = g.id AND gm.status = 'accepted'
-      ) mcount ON true
-      ORDER BY COALESCE(last_message.created_at, g.updated_at) DESC, g.id DESC
-      LIMIT $2 OFFSET $3
-    `,
-    [userId, limit, offset],
-  );
+  const uid = ensureStringId(String(userId), 'userId');
+  const groupIds = await listAcceptedGroupIdsForUser(uid);
+  const groups = (await getValue('/groups')) ?? {};
+  const groupMembers = (await getValue('/groupMembers')) ?? {};
+  const reads = (await getValue('/groupReads')) ?? {};
 
-  return result.rows.map(mapGroupSummary);
+  const summaries = [];
+  for (const gid of groupIds) {
+    const g = groups[gid];
+    if (!g) continue;
+    const msgs = (await getValue(`/groupMessages/${gid}`)) ?? {};
+    const msgList = Object.values(msgs).filter(Boolean);
+    msgList.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+    const last = msgList[0] ?? null;
+    const lastRead = reads?.[gid]?.[uid]?.lastReadMessageId ?? null;
+    const unreadCount = msgList.filter((m) => String(m.senderId) !== uid && (!lastRead || String(m.id) > String(lastRead))).length;
+    const memberCount = Object.values(groupMembers?.[gid] ?? {}).filter((m) => m && m.status === 'accepted').length;
+
+    summaries.push(
+      mapGroupSummary({
+        id: gid,
+        name: g.name,
+        created_by: g.createdBy,
+        updated_at: g.updatedAt,
+        unread_count: unreadCount,
+        member_count: memberCount,
+        message_id: last?.id ?? null,
+        message_sender_id: last?.senderId ?? null,
+        message_type: last?.type ?? null,
+        message_content: last?.content ?? null,
+        message_image_path: last?.imagePath ?? null,
+        message_created_at: last?.createdAt ?? null,
+      }),
+    );
+  }
+
+  summaries.sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  return summaries.slice(offset, offset + limit);
 }
 
 async function listMembers(groupId) {
-  const result = await pool.query(
-    `
-      SELECT
-        gm.*,
-        u.name AS user_name,
-        u.email AS user_email,
-        u.avatar_path AS user_avatar_path,
-        u.public_key AS user_public_key
-      FROM group_members gm
-      JOIN users u ON u.id = gm.user_id
-      WHERE gm.group_id = $1
-      ORDER BY
-        CASE WHEN gm.role = 'admin' THEN 0 ELSE 1 END,
-        u.name ASC
-    `,
-    [groupId],
-  );
-  return result.rows.map(mapGroupMember);
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const members = (await getValue(`/groupMembers/${gid}`)) ?? {};
+  const users = (await getValue('/users')) ?? {};
+  const list = Object.values(members)
+    .filter(Boolean)
+    .map((m) => {
+      const u = users[m.userId];
+      return mapGroupMember({
+        ...m,
+        user_id: m.userId,
+        user_name: u?.name,
+        user_email: u?.email,
+        user_avatar_path: u?.avatarPath ?? null,
+        user_public_key: u?.publicKey ?? null,
+      });
+    });
+
+  list.sort((a, b) => {
+    const roleA = a.role === 'admin' ? 0 : 1;
+    const roleB = b.role === 'admin' ? 0 : 1;
+    if (roleA !== roleB) return roleA - roleB;
+    return String(a.user?.name ?? '').localeCompare(String(b.user?.name ?? ''));
+  });
+
+  return list;
 }
 
 async function findGroupById(groupId) {
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM groups
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [groupId],
-  );
-  return result.rows[0] ? mapGroup(result.rows[0]) : null;
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const group = await getValue(`/groups/${gid}`);
+  return group ? mapGroup(group) : null;
 }
 
 async function createGroupMessage({ groupId, senderId, type, content, imagePath }) {
-  const result = await pool.query(
-    `
-      INSERT INTO group_messages (group_id, sender_id, type, content, image_path)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `,
-    [groupId, senderId, type, content ?? null, imagePath ?? null],
-  );
-
-  await pool.query('UPDATE groups SET updated_at = NOW() WHERE id = $1', [groupId]);
-  return mapGroupMessage(result.rows[0]);
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const sid = ensureStringId(String(senderId), 'senderId');
+  const timestamp = nowIso();
+  const { key: messageId } = await pushChild(`/groupMessages/${gid}`, {});
+  const message = {
+    id: messageId,
+    groupId: gid,
+    senderId: sid,
+    type,
+    content: content ?? null,
+    imagePath: imagePath ?? null,
+    createdAt: timestamp,
+  };
+  await setValue(`/groupMessages/${gid}/${messageId}`, message);
+  await updateValue(`/groups/${gid}`, { updatedAt: timestamp });
+  return mapGroupMessage(message);
 }
 
 async function listGroupMessages(groupId, { limit = 50, beforeId } = {}) {
-  const params = [groupId, limit];
-  let paginationClause = '';
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const all = (await getValue(`/groupMessages/${gid}`)) ?? {};
+  const messages = Object.values(all)
+    .filter(Boolean)
+    .sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')))
+    .map(mapGroupMessage);
+
   if (beforeId) {
-    params.push(beforeId);
-    paginationClause = `AND id < $${params.length}`;
+    const idx = messages.findIndex((m) => m.id === String(beforeId));
+    const slice = idx > 0 ? messages.slice(0, idx) : messages;
+    return slice.slice(Math.max(slice.length - limit, 0));
   }
 
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM group_messages
-      WHERE group_id = $1
-        ${paginationClause}
-      ORDER BY id DESC
-      LIMIT $2
-    `,
-    params,
-  );
-
-  return result.rows.reverse().map(mapGroupMessage);
+  return messages.slice(Math.max(messages.length - limit, 0));
 }
 
 async function markGroupRead({ groupId, userId, lastReadMessageId }) {
-  await pool.query(
-    `
-      INSERT INTO group_reads (group_id, user_id, last_read_message_id, updated_at)
-      VALUES ($1, $2, $3, NOW())
-      ON CONFLICT (group_id, user_id)
-      DO UPDATE SET last_read_message_id = GREATEST(group_reads.last_read_message_id, EXCLUDED.last_read_message_id),
-                    updated_at = NOW()
-    `,
-    [groupId, userId, lastReadMessageId],
-  );
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const msgId = ensureStringId(String(lastReadMessageId), 'lastReadMessageId');
+  const existing = await getValue(`/groupReads/${gid}/${uid}`);
+  const next = !existing?.lastReadMessageId || String(msgId) > String(existing.lastReadMessageId) ? msgId : existing.lastReadMessageId;
+  await setValue(`/groupReads/${gid}/${uid}`, { lastReadMessageId: next, updatedAt: nowIso() });
 }
 
 module.exports = {
