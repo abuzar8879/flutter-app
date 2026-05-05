@@ -17,12 +17,15 @@ class GroupListScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupListScreenState extends ConsumerState<GroupListScreen> {
+  dynamic _socket;
+
   @override
   void initState() {
     super.initState();
     // Refresh list on new group messages.
     Future.microtask(() {
       final socket = ref.read(chatSocketServiceProvider);
+      _socket = socket;
       socket?.addGroupMessageListener(_handleGroupMessage);
       socket?.addGroupReadListener(_handleGroupRead);
     });
@@ -30,8 +33,8 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
 
   @override
   void dispose() {
-    ref.read(chatSocketServiceProvider)?.removeGroupMessageListener(_handleGroupMessage);
-    ref.read(chatSocketServiceProvider)?.removeGroupReadListener(_handleGroupRead);
+    _socket?.removeGroupMessageListener(_handleGroupMessage);
+    _socket?.removeGroupReadListener(_handleGroupRead);
     super.dispose();
   }
 
@@ -150,4 +153,3 @@ class _GroupTile extends StatelessWidget {
     );
   }
 }
-
