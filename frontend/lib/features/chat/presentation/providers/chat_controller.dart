@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../data/chat_socket_service.dart';
 import '../../domain/chat_message.dart';
 import 'chat_providers.dart';
 import 'conversation_list_provider.dart';
@@ -62,18 +63,14 @@ class ChatController extends Notifier<ChatState> {
   bool _loadScheduled = false;
   bool _loading = false;
   String? _loadedConversationId;
+  ChatSocketService? _socket;
+  bool _socketListenersAttached = false;
 
   @override
   ChatState build() {
     ref.onDispose(() {
       _typingTimer?.cancel();
-      final socket = ref.read(chatSocketServiceProvider);
-      socket?.removeMessageListener(_handleSocketMessage);
-      socket?.removeMessageUpdatedListener(_handleSocketMessageUpdated);
-      socket?.removeOnlineListener(_handleOnlineUsers);
-      socket?.removeTypingListener(_handleTyping);
-      socket?.removeStopTypingListener(_handleStopTyping);
-      socket?.removeMessagesReadListener(_handleMessagesRead);
+      _attachSocket(null);
     });
 
     // If the screen is opened before the auth session is restored, `_loadChat`
@@ -85,8 +82,39 @@ class ChatController extends Notifier<ChatState> {
       _ensureLoaded();
     });
 
+    ref.listen(chatSocketServiceProvider, (_, next) {
+      _attachSocket(next);
+    });
+
     _ensureLoaded();
     return const ChatState();
+  }
+
+  void _attachSocket(ChatSocketService? socket) {
+    if (_socket != socket || socket == null) {
+      _socket?.removeMessageListener(_handleSocketMessage);
+      _socket?.removeMessageUpdatedListener(_handleSocketMessageUpdated);
+      _socket?.removeOnlineListener(_handleOnlineUsers);
+      _socket?.removeTypingListener(_handleTyping);
+      _socket?.removeStopTypingListener(_handleStopTyping);
+      _socket?.removeMessagesReadListener(_handleMessagesRead);
+      _socketListenersAttached = false;
+    }
+
+    _socket = socket;
+    if (_socket == null ||
+        _loadedConversationId == null ||
+        _socketListenersAttached) {
+      return;
+    }
+
+    _socket?.addMessageListener(_handleSocketMessage);
+    _socket?.addMessageUpdatedListener(_handleSocketMessageUpdated);
+    _socket?.addOnlineListener(_handleOnlineUsers);
+    _socket?.addTypingListener(_handleTyping);
+    _socket?.addStopTypingListener(_handleStopTyping);
+    _socket?.addMessagesReadListener(_handleMessagesRead);
+    _socketListenersAttached = true;
   }
 
   void _ensureLoaded() {
@@ -132,13 +160,7 @@ class ChatController extends Notifier<ChatState> {
         isLoading: false,
       );
       _loadedConversationId = conversation.id;
-
-      socket?.addMessageListener(_handleSocketMessage);
-      socket?.addMessageUpdatedListener(_handleSocketMessageUpdated);
-      socket?.addOnlineListener(_handleOnlineUsers);
-      socket?.addTypingListener(_handleTyping);
-      socket?.addStopTypingListener(_handleStopTyping);
-      socket?.addMessagesReadListener(_handleMessagesRead);
+      _attachSocket(socket);
 
       ref.invalidate(conversationListProvider);
     } catch (error) {

@@ -162,14 +162,7 @@ function initializeSocket(server) {
           groupId,
           ...result,
         };
-        io.to(groupRoom(groupId)).emit('group_message_received', eventPayload);
-        // Also emit directly to each accepted member room for reliability,
-        // in case a client missed room join/rejoin.
-        const members = await groupsService.getGroupMembers(userId, groupId);
-        for (const member of members) {
-          if (member.status !== 'accepted') continue;
-          io.to(userRoom(member.userId)).emit('group_message_received', eventPayload);
-        }
+        await emitGroupMessage(eventPayload, userId);
         if (typeof callback === 'function') {
           callback({ ok: true, groupId, ...result });
         }
@@ -277,8 +270,29 @@ function emitChatMessageUpdated(result) {
   activeIo.to(userRoom(result.message.senderId)).emit('message_updated', result);
 }
 
+async function emitGroupMessage(result, requesterId = null) {
+  if (!activeIo || !result?.message) return;
+  const groupId = String(result.groupId ?? result.message.groupId ?? '');
+  if (!groupId) return;
+
+  activeIo.to(groupRoom(groupId)).emit('group_message_received', result);
+
+  try {
+    const members = requesterId
+      ? await groupsService.getGroupMembers(String(requesterId), groupId)
+      : [];
+    for (const member of members) {
+      if (member.status !== 'accepted') continue;
+      activeIo.to(userRoom(member.userId)).emit('group_message_received', result);
+    }
+  } catch (error) {
+    console.error('Failed to emit group message:', error.message);
+  }
+}
+
 module.exports = {
   emitChatMessage,
   emitChatMessageUpdated,
+  emitGroupMessage,
   initializeSocket,
 };

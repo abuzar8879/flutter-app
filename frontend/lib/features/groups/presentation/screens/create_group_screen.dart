@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../friends/presentation/providers/friends_providers.dart';
-import '../../../users/domain/app_user.dart';
-import '../../data/groups_repository.dart';
 import '../providers/groups_providers.dart';
 
 class CreateGroupScreen extends ConsumerStatefulWidget {
@@ -49,13 +47,17 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
               children: [
                 Text(
                   'Select friends',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const Spacer(),
-                Text('${_selected.length} selected',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    )),
+                Text(
+                  '${_selected.length} selected',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
               ],
             ),
           ),
@@ -88,7 +90,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('Failed to load friends: $error')),
+              error: (error, _) =>
+                  Center(child: Text('Failed to load friends: $error')),
             ),
           ),
           SafeArea(
@@ -101,9 +104,13 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                   onPressed: _selected.isEmpty
                       ? null
                       : () async {
-                          final session = ref.read(authControllerProvider).session;
+                          final session = ref
+                              .read(authControllerProvider)
+                              .session;
                           if (session == null) return;
-                          final group = await ref.read(groupsRepositoryProvider).createGroup(
+                          final group = await ref
+                              .read(groupsRepositoryProvider)
+                              .createGroup(
                                 token: session.token,
                                 name: _nameController.text.trim(),
                                 inviteeIds: _selected.toList(),
@@ -122,4 +129,3 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     );
   }
 }
-

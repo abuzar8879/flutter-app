@@ -1,5 +1,6 @@
 const path = require('path');
 const groupsService = require('./groups.service');
+const { emitGroupMessage } = require('../../socket');
 
 async function createGroup(request, response, next) {
   try {
@@ -100,6 +101,13 @@ async function sendMessage(request, response, next) {
       request.user.sub,
       request.params.groupId,
       request.body ?? {},
+    );
+    await emitGroupMessage(
+      {
+        groupId: String(request.params.groupId),
+        ...result,
+      },
+      request.user.sub,
     );
     response.status(201).json(result);
   } catch (error) {

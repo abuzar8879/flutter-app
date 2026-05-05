@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../chat/data/chat_socket_service.dart';
 import '../../../chat/presentation/providers/chat_providers.dart';
 import '../../domain/group_message.dart';
 import 'groups_providers.dart';
@@ -43,10 +44,10 @@ class GroupChatState {
   }
 }
 
-final groupChatControllerProvider =
-    NotifierProvider.autoDispose.family<GroupChatController, GroupChatState, String>(
-  GroupChatController.new,
-);
+final groupChatControllerProvider = NotifierProvider.autoDispose
+    .family<GroupChatController, GroupChatState, String>(
+      GroupChatController.new,
+    );
 
 class GroupChatController extends Notifier<GroupChatState> {
   GroupChatController(this.groupId);
@@ -55,16 +56,15 @@ class GroupChatController extends Notifier<GroupChatState> {
   Timer? _typingTimer;
   bool _loading = false;
   bool _loadScheduled = false;
-  bool _startedListeners = false;
+  bool _loaded = false;
+  ChatSocketService? _socket;
+  bool _socketListenersAttached = false;
 
   @override
   GroupChatState build() {
     ref.onDispose(() {
       _typingTimer?.cancel();
-      final socket = ref.read(chatSocketServiceProvider);
-      socket?.removeGroupMessageListener(_onGroupMessage);
-      socket?.removeGroupTypingListener(_onGroupTyping);
-      socket?.removeGroupStopTypingListener(_onGroupStopTyping);
+      _attachSocket(null);
     });
 
     ref.listen(authControllerProvider, (_, next) {
@@ -72,8 +72,30 @@ class GroupChatController extends Notifier<GroupChatState> {
       _ensureLoaded();
     });
 
+    ref.listen(chatSocketServiceProvider, (_, next) {
+      _attachSocket(next);
+    });
+
     _ensureLoaded();
     return const GroupChatState();
+  }
+
+  void _attachSocket(ChatSocketService? socket) {
+    if (_socket != socket || socket == null) {
+      _socket?.removeGroupMessageListener(_onGroupMessage);
+      _socket?.removeGroupTypingListener(_onGroupTyping);
+      _socket?.removeGroupStopTypingListener(_onGroupStopTyping);
+      _socketListenersAttached = false;
+    }
+
+    _socket = socket;
+    if (_socket == null || !_loaded || _socketListenersAttached) return;
+
+    _socket?.addGroupMessageListener(_onGroupMessage);
+    _socket?.addGroupTypingListener(_onGroupTyping);
+    _socket?.addGroupStopTypingListener(_onGroupStopTyping);
+    unawaited(_socket!.joinGroup(groupId));
+    _socketListenersAttached = true;
   }
 
   void _ensureLoaded() {
@@ -92,18 +114,14 @@ class GroupChatController extends Notifier<GroupChatState> {
     _loading = true;
 
     try {
-      if (!_startedListeners) {
-        _startedListeners = true;
-        final socket = ref.read(chatSocketServiceProvider);
-        socket?.addGroupMessageListener(_onGroupMessage);
-        socket?.addGroupTypingListener(_onGroupTyping);
-        socket?.addGroupStopTypingListener(_onGroupStopTyping);
-        // Join early so realtime events aren't missed while initial fetch runs.
-        await socket?.joinGroup(groupId);
-      }
+      _loaded = true;
+      _attachSocket(ref.read(chatSocketServiceProvider));
 
       final repo = ref.read(groupsRepositoryProvider);
-      final messages = await repo.fetchMessages(token: session.token, groupId: groupId);
+      final messages = await repo.fetchMessages(
+        token: session.token,
+        groupId: groupId,
+      );
 
       state = state.copyWith(messages: List.of(messages), isLoading: false);
       await _markLatestAsRead();
@@ -166,7 +184,9 @@ class GroupChatController extends Notifier<GroupChatState> {
     if (latest.senderId == session.user.id) return;
 
     ref.read(chatSocketServiceProvider)?.sendMarkGroupRead(groupId, latest.id);
-    await ref.read(groupsRepositoryProvider).markRead(
+    await ref
+        .read(groupsRepositoryProvider)
+        .markRead(
           token: session.token,
           groupId: groupId,
           lastReadMessageId: latest.id,
@@ -174,4 +194,3 @@ class GroupChatController extends Notifier<GroupChatState> {
     ref.invalidate(groupListProvider);
   }
 }
-

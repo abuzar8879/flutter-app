@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../chat/data/chat_socket_service.dart';
 import '../../../chat/presentation/providers/chat_providers.dart';
 import '../../domain/group_message.dart';
 import '../../domain/group_summary.dart';
@@ -17,37 +18,49 @@ class GroupListScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupListScreenState extends ConsumerState<GroupListScreen> {
-  dynamic _socket;
+  ChatSocketService? _socket;
 
   @override
   void initState() {
     super.initState();
     // Refresh list on new group messages.
     Future.microtask(() {
-      final socket = ref.read(chatSocketServiceProvider);
-      _socket = socket;
-      socket?.addGroupMessageListener(_handleGroupMessage);
-      socket?.addGroupReadListener(_handleGroupRead);
+      _setSocket(ref.read(chatSocketServiceProvider));
     });
   }
 
   @override
   void dispose() {
+    _setSocket(null);
+    super.dispose();
+  }
+
+  void _setSocket(ChatSocketService? socket) {
+    if (_socket == socket) return;
     _socket?.removeGroupMessageListener(_handleGroupMessage);
     _socket?.removeGroupReadListener(_handleGroupRead);
-    super.dispose();
+    _socket = socket;
+    _socket?.addGroupMessageListener(_handleGroupMessage);
+    _socket?.addGroupReadListener(_handleGroupRead);
   }
 
   void _handleGroupMessage(GroupMessage message) {
     ref.invalidate(groupListProvider);
   }
 
-  void _handleGroupRead(String groupId, String readerId, String lastReadMessageId) {
+  void _handleGroupRead(
+    String groupId,
+    String readerId,
+    String lastReadMessageId,
+  ) {
     ref.invalidate(groupListProvider);
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<ChatSocketService?>(chatSocketServiceProvider, (_, next) {
+      _setSocket(next);
+    });
     final groups = ref.watch(groupListProvider);
     final invites = ref.watch(groupInvitesProvider);
     final theme = Theme.of(context);
@@ -85,7 +98,9 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
               if (!context.mounted) return;
               if (created is GroupSummary) {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => GroupChatScreen(group: created)),
+                  MaterialPageRoute(
+                    builder: (_) => GroupChatScreen(group: created),
+                  ),
                 );
               }
             },
@@ -111,12 +126,14 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: items.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) => _GroupTile(summary: items[index]),
+              itemBuilder: (context, index) =>
+                  _GroupTile(summary: items[index]),
             ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Failed to load groups: $error')),
+        error: (error, _) =>
+            Center(child: Text('Failed to load groups: $error')),
       ),
     );
   }
