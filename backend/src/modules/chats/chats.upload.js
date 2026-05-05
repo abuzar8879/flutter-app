@@ -17,7 +17,9 @@ const storage = multer.diskStorage({
 });
 
 const uploadChatImage = multer({ storage });
+const uploadChatAudio = multer({ storage });
 
 module.exports = {
+  uploadChatAudio,
   uploadChatImage,
 };

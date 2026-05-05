@@ -1,6 +1,6 @@
 const path = require('path');
 const chatsService = require('./chats.service');
-const { emitChatMessage } = require('../../socket');
+const { emitChatMessage, emitChatMessageUpdated } = require('../../socket');
 
 async function createConversation(request, response, next) {
   try {
@@ -61,6 +61,50 @@ async function sendMessage(request, response, next) {
   }
 }
 
+async function editMessage(request, response, next) {
+  try {
+    const result = await chatsService.editMessage(
+      request.user.sub,
+      request.params.conversationId,
+      request.params.messageId,
+      request.body,
+    );
+    emitChatMessageUpdated(result);
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteMessage(request, response, next) {
+  try {
+    const result = await chatsService.deleteMessage(
+      request.user.sub,
+      request.params.conversationId,
+      request.params.messageId,
+    );
+    emitChatMessageUpdated(result);
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function reactToMessage(request, response, next) {
+  try {
+    const result = await chatsService.reactToMessage(
+      request.user.sub,
+      request.params.conversationId,
+      request.params.messageId,
+      request.body,
+    );
+    emitChatMessageUpdated(result);
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function uploadImage(request, response) {
   const fileName = path.basename(request.file.filename);
   response.status(201).json({
@@ -68,11 +112,22 @@ async function uploadImage(request, response) {
   });
 }
 
+async function uploadAudio(request, response) {
+  const fileName = path.basename(request.file.filename);
+  response.status(201).json({
+    audioPath: `/uploads/chat/${fileName}`,
+  });
+}
+
 module.exports = {
   createConversation,
   getMessages,
+  editMessage,
+  deleteMessage,
   listConversations,
   markConversationRead,
+  reactToMessage,
   sendMessage,
+  uploadAudio,
   uploadImage,
 };

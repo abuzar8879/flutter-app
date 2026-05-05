@@ -62,9 +62,11 @@ async function markConversationRead(userId, conversationId) {
 async function sendMessage(userId, payload) {
   const senderId = String(userId);
   const receiverId = String(payload.receiverId ?? '');
-  const type = ['image', 'encrypted'].includes(payload.type) ? payload.type : 'text';
+  const type = ['image', 'encrypted', 'voice'].includes(payload.type) ? payload.type : 'text';
   const content = typeof payload.content === 'string' ? payload.content.trim() : '';
   const imagePath = typeof payload.imagePath === 'string' ? payload.imagePath.trim() : '';
+  const audioPath = typeof payload.audioPath === 'string' ? payload.audioPath.trim() : '';
+  const replyToMessageId = payload.replyToMessageId ? String(payload.replyToMessageId) : null;
 
   if (!receiverId || receiverId === '0') {
     throw new AppError('receiverId is required.', 400);
@@ -78,7 +80,18 @@ async function sendMessage(userId, payload) {
     throw new AppError('A valid chat image path is required.', 400);
   }
 
+  if (type === 'voice' && !audioPath.startsWith('/uploads/chat/')) {
+    throw new AppError('A valid voice message path is required.', 400);
+  }
+
   const conversation = await getOrCreateConversation(senderId, receiverId);
+  if (replyToMessageId) {
+    const replyTarget = await chatsRepository.findMessageForUser(conversation.id, replyToMessageId, senderId);
+    if (!replyTarget || replyTarget.conversationId !== conversation.id) {
+      throw new AppError('Reply target not found.', 404);
+    }
+  }
+
   const message = await chatsRepository.createMessage({
     conversationId: conversation.id,
     senderId,
@@ -86,6 +99,8 @@ async function sendMessage(userId, payload) {
     type,
     content: type === 'text' || type === 'encrypted' ? content : null,
     imagePath: type === 'image' ? imagePath : null,
+    audioPath: type === 'voice' ? audioPath : null,
+    replyToMessageId,
   });
 
   const sender = await usersRepository.findUserById(senderId);
@@ -95,7 +110,7 @@ async function sendMessage(userId, payload) {
     await sendPushNotification(
       receiver.fcmToken,
       sender ? sender.name : 'New Message',
-      type === 'image' ? 'Sent a photo' : 'Sent a message',
+      type === 'image' ? 'Sent a photo' : type === 'voice' ? 'Sent a voice message' : 'Sent a message',
       {
         conversationId: conversation.id.toString(),
         senderId: senderId.toString(),
@@ -107,10 +122,77 @@ async function sendMessage(userId, payload) {
   return { conversation, message };
 }
 
+async function editMessage(userId, conversationId, messageId, payload = {}) {
+  userId = String(userId);
+  conversationId = String(conversationId);
+  messageId = String(messageId);
+  const content = typeof payload.content === 'string' ? payload.content.trim() : '';
+
+  if (!content) {
+    throw new AppError('Message text is required.', 400);
+  }
+
+  const message = await chatsRepository.findMessageForUser(conversationId, messageId, userId);
+  if (!message) throw new AppError('Message not found.', 404);
+  if (message.senderId !== userId) throw new AppError('You can only edit your own messages.', 403);
+  if (message.deletedAt) throw new AppError('Deleted messages cannot be edited.', 400);
+  if (message.type !== 'text' && message.type !== 'encrypted') {
+    throw new AppError('Only text messages can be edited.', 400);
+  }
+
+  const updatedMessage = await chatsRepository.updateMessage({
+    conversationId,
+    messageId,
+    content,
+  });
+  return { message: updatedMessage };
+}
+
+async function deleteMessage(userId, conversationId, messageId) {
+  userId = String(userId);
+  conversationId = String(conversationId);
+  messageId = String(messageId);
+
+  const message = await chatsRepository.findMessageForUser(conversationId, messageId, userId);
+  if (!message) throw new AppError('Message not found.', 404);
+  if (message.senderId !== userId) throw new AppError('You can only delete your own messages.', 403);
+  if (message.deletedAt) return { message };
+
+  const updatedMessage = await chatsRepository.deleteMessage({ conversationId, messageId });
+  return { message: updatedMessage };
+}
+
+async function reactToMessage(userId, conversationId, messageId, payload = {}) {
+  userId = String(userId);
+  conversationId = String(conversationId);
+  messageId = String(messageId);
+  const reaction = typeof payload.reaction === 'string' ? payload.reaction.trim() : '';
+  const allowed = new Set(['👍', '❤️', '😂', '😮', '😢', '🙏']);
+
+  if (reaction && !allowed.has(reaction)) {
+    throw new AppError('Unsupported reaction.', 400);
+  }
+
+  const message = await chatsRepository.findMessageForUser(conversationId, messageId, userId);
+  if (!message) throw new AppError('Message not found.', 404);
+  if (message.deletedAt) throw new AppError('Deleted messages cannot receive reactions.', 400);
+
+  const updatedMessage = await chatsRepository.setReaction({
+    conversationId,
+    messageId,
+    userId,
+    reaction,
+  });
+  return { message: updatedMessage };
+}
+
 module.exports = {
   getMessages,
   getOrCreateConversation,
   listConversations,
   markConversationRead,
+  editMessage,
+  deleteMessage,
+  reactToMessage,
   sendMessage,
 };

@@ -48,7 +48,7 @@ async function findConversationForUser(conversationId, userId) {
   return mapConversation(convo);
 }
 
-async function createMessage({ conversationId, senderId, receiverId, type, content, imagePath }) {
+async function createMessage({ conversationId, senderId, receiverId, type, content, imagePath, audioPath, replyToMessageId }) {
   const cid = ensureStringId(String(conversationId), 'conversationId');
   const sid = ensureStringId(String(senderId), 'senderId');
   const rid = ensureStringId(String(receiverId), 'receiverId');
@@ -62,6 +62,11 @@ async function createMessage({ conversationId, senderId, receiverId, type, conte
     type,
     content: content ?? null,
     imagePath: imagePath ?? null,
+    audioPath: audioPath ?? null,
+    replyToMessageId: replyToMessageId ?? null,
+    editedAt: null,
+    deletedAt: null,
+    reactions: {},
     readAt: null,
     createdAt: timestamp,
   };
@@ -121,6 +126,11 @@ async function findConversationSummaries(userId, { limit = 30, offset = 0 } = {}
         message_type: last?.type ?? null,
         message_content: last?.content ?? null,
         message_image_path: last?.imagePath ?? null,
+        message_audio_path: last?.audioPath ?? null,
+        message_reply_to_message_id: last?.replyToMessageId ?? null,
+        message_edited_at: last?.editedAt ?? null,
+        message_deleted_at: last?.deletedAt ?? null,
+        message_reactions: last?.reactions ?? {},
         message_read_at: last?.readAt ?? null,
         message_created_at: last?.createdAt ?? null,
         unread_count: unreadCount,
@@ -130,6 +140,59 @@ async function findConversationSummaries(userId, { limit = 30, offset = 0 } = {}
 
   summaries.sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
   return summaries.slice(offset, offset + limit);
+}
+
+async function findMessageForUser(conversationId, messageId, userId) {
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const conversation = await findConversationForUser(cid, userId);
+  if (!conversation) return null;
+  const message = await getValue(`/messages/${cid}/${mid}`);
+  return message ? mapMessage(message) : null;
+}
+
+async function updateMessage({ conversationId, messageId, content }) {
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const timestamp = nowIso();
+  await updateValue(`/messages/${cid}/${mid}`, {
+    content,
+    editedAt: timestamp,
+  });
+  const updated = await getValue(`/messages/${cid}/${mid}`);
+  return mapMessage(updated);
+}
+
+async function deleteMessage({ conversationId, messageId }) {
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const timestamp = nowIso();
+  await updateValue(`/messages/${cid}/${mid}`, {
+    content: null,
+    imagePath: null,
+    audioPath: null,
+    deletedAt: timestamp,
+    editedAt: null,
+    reactions: {},
+  });
+  const updated = await getValue(`/messages/${cid}/${mid}`);
+  return mapMessage(updated);
+}
+
+async function setReaction({ conversationId, messageId, userId, reaction }) {
+  const cid = ensureStringId(String(conversationId), 'conversationId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const uid = ensureStringId(String(userId), 'userId');
+  const message = (await getValue(`/messages/${cid}/${mid}`)) ?? {};
+  const reactions = message.reactions && typeof message.reactions === 'object' ? { ...message.reactions } : {};
+  if (reaction) {
+    reactions[uid] = reaction;
+  } else {
+    delete reactions[uid];
+  }
+  await updateValue(`/messages/${cid}/${mid}`, { reactions });
+  const updated = await getValue(`/messages/${cid}/${mid}`);
+  return mapMessage(updated);
 }
 
 async function markConversationRead(conversationId, userId) {
@@ -154,6 +217,10 @@ module.exports = {
   findConversationSummaries,
   findConversationBetween,
   findConversationForUser,
+  findMessageForUser,
   findMessagesForConversation,
   markConversationRead,
+  updateMessage,
+  deleteMessage,
+  setReaction,
 };

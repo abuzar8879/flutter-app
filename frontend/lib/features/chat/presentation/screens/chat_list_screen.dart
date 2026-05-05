@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -21,6 +23,8 @@ class ChatListScreen extends ConsumerStatefulWidget {
 
 class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   ChatSocketService? _socket;
+  final _typingConversationIds = <String>{};
+  final _typingTimers = <String, Timer>{};
 
   @override
   void initState() {
@@ -33,18 +37,45 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   @override
   void dispose() {
     _setSocket(null);
+    for (final timer in _typingTimers.values) {
+      timer.cancel();
+    }
     super.dispose();
   }
 
   void _setSocket(ChatSocketService? socket) {
     if (_socket == socket) return;
     _socket?.removeMessageListener(_handleNewMessage);
+    _socket?.removeTypingListener(_handleTyping);
+    _socket?.removeStopTypingListener(_handleStopTyping);
     _socket = socket;
     _socket?.addMessageListener(_handleNewMessage);
+    _socket?.addTypingListener(_handleTyping);
+    _socket?.addStopTypingListener(_handleStopTyping);
   }
 
   void _handleNewMessage(ChatMessage message) {
     ref.invalidate(conversationListProvider);
+  }
+
+  void _handleTyping(String userId, String conversationId) {
+    if (conversationId.isEmpty) return;
+    _typingTimers[conversationId]?.cancel();
+    _typingTimers[conversationId] = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _typingConversationIds.remove(conversationId));
+      }
+    });
+    if (mounted) {
+      setState(() => _typingConversationIds.add(conversationId));
+    }
+  }
+
+  void _handleStopTyping(String userId, String conversationId) {
+    _typingTimers.remove(conversationId)?.cancel();
+    if (mounted) {
+      setState(() => _typingConversationIds.remove(conversationId));
+    }
   }
 
   @override
@@ -63,9 +94,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.groups_rounded),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const GroupListScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const GroupListScreen())),
           ),
           invites.maybeWhen(
             data: (items) => IconButton(
@@ -85,10 +116,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.search_rounded), onPressed: () {}),
           IconButton(
             icon: const Icon(Icons.more_vert_rounded),
             onPressed: () {},
@@ -125,10 +153,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: items.length,
               itemBuilder: (context, index) {
-                return _ConversationTile(summary: items[index])
-                    .animate()
-                    .fadeIn(delay: (index * 50).ms)
-                    .slideX(begin: 0.1);
+                return _ConversationTile(
+                  summary: items[index],
+                  isTyping: _typingConversationIds.contains(items[index].id),
+                ).animate().fadeIn(delay: (index * 50).ms).slideX(begin: 0.1);
               },
             ),
           );
@@ -140,9 +168,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline_rounded, color: theme.colorScheme.error, size: 48),
+                Icon(
+                  Icons.error_outline_rounded,
+                  color: theme.colorScheme.error,
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
-                Text('Failed to load chats', style: theme.textTheme.titleMedium),
+                Text(
+                  'Failed to load chats',
+                  style: theme.textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Text(error.toString(), textAlign: TextAlign.center),
               ],
@@ -155,29 +190,33 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 }
 
 class _ConversationTile extends ConsumerWidget {
-  const _ConversationTile({required this.summary});
+  const _ConversationTile({required this.summary, required this.isTyping});
 
   final ConversationSummary summary;
+  final bool isTyping;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    
+
     return InkWell(
       onTap: () async {
         await Navigator.of(context).push(
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => 
-              ChatScreen(friend: summary.friend),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return SlideTransition(
-                position: animation.drive(Tween(
-                  begin: const Offset(1, 0),
-                  end: Offset.zero,
-                ).chain(CurveTween(curve: Curves.easeOutCubic))),
-                child: child,
-              );
-            },
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                ChatScreen(friend: summary.friend),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return SlideTransition(
+                    position: animation.drive(
+                      Tween(
+                        begin: const Offset(1, 0),
+                        end: Offset.zero,
+                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                    ),
+                    child: child,
+                  );
+                },
           ),
         );
         ref.invalidate(conversationListProvider);
@@ -220,7 +259,10 @@ class _ConversationTile extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
                         shape: BoxShape.circle,
-                        border: Border.all(color: theme.colorScheme.surface, width: 2),
+                        border: Border.all(
+                          color: theme.colorScheme.surface,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -237,7 +279,9 @@ class _ConversationTile extends ConsumerWidget {
                       Text(
                         summary.friend.name,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: summary.unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
+                          fontWeight: summary.unreadCount > 0
+                              ? FontWeight.bold
+                              : FontWeight.w600,
                         ),
                       ),
                       if (summary.lastMessage != null)
@@ -253,12 +297,15 @@ class _ConversationTile extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: _Preview(summary: summary),
+                        child: _Preview(summary: summary, isTyping: isTyping),
                       ),
                       if (summary.unreadCount > 0)
                         Container(
                           margin: const EdgeInsets.only(left: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
                             borderRadius: BorderRadius.circular(10),
@@ -285,15 +332,28 @@ class _ConversationTile extends ConsumerWidget {
 }
 
 class _Preview extends ConsumerWidget {
-  const _Preview({required this.summary});
+  const _Preview({required this.summary, required this.isTyping});
 
   final ConversationSummary summary;
+  final bool isTyping;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final message = summary.lastMessage;
-    
+
+    if (isTyping) {
+      return Text(
+        'typing...',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.primary,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
     if (message == null) {
       return Text(
         'No messages yet',
@@ -307,6 +367,9 @@ class _Preview extends ConsumerWidget {
     if (message.type == ChatMessageType.image) {
       content = 'Photo';
       icon = Icons.image_rounded;
+    } else if (message.type == ChatMessageType.voice) {
+      content = 'Voice message';
+      icon = Icons.mic_rounded;
     } else if (message.type == ChatMessageType.encrypted) {
       final decryptor = ref.watch(
         messageDecryptorProvider(
@@ -326,7 +389,11 @@ class _Preview extends ConsumerWidget {
     return Row(
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 12, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+          Icon(
+            icon,
+            size: 12,
+            color: theme.colorScheme.onSurface.withOpacity(0.4),
+          ),
           const SizedBox(width: 4),
         ],
         Expanded(
@@ -335,9 +402,9 @@ class _Preview extends ConsumerWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: summary.unreadCount > 0 
-                ? theme.colorScheme.onSurface 
-                : theme.colorScheme.onSurface.withOpacity(0.6),
+              color: summary.unreadCount > 0
+                  ? theme.colorScheme.onSurface
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
             ),
           ),
         ),
@@ -354,7 +421,7 @@ String _initial(String name) {
 String _formatDate(DateTime date) {
   final now = DateTime.now();
   final diff = now.difference(date);
-  
+
   if (diff.inDays == 0) {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   } else if (diff.inDays == 1) {

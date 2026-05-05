@@ -9,6 +9,7 @@ function mapConversation(row) {
 }
 
 function mapMessage(row) {
+  const reactions = row.reactions && typeof row.reactions === 'object' ? row.reactions : {};
   return {
     id: String(row.id),
     conversationId: String(row.conversationId ?? row.conversation_id),
@@ -17,6 +18,11 @@ function mapMessage(row) {
     type: row.type,
     content: row.content,
     imagePath: row.imagePath ?? row.image_path ?? null,
+    audioPath: row.audioPath ?? row.audio_path ?? null,
+    replyToMessageId: row.replyToMessageId ?? row.reply_to_message_id ?? null,
+    editedAt: row.editedAt ?? row.edited_at ?? null,
+    deletedAt: row.deletedAt ?? row.deleted_at ?? null,
+    reactions,
     readAt: row.readAt ?? row.read_at ?? null,
     createdAt: row.createdAt ?? row.created_at ?? null,
   };
@@ -41,6 +47,11 @@ function mapConversationSummary(row) {
           type: row.message_type,
           content: row.message_content,
           imagePath: row.message_image_path,
+          audioPath: row.message_audio_path,
+          replyToMessageId: row.message_reply_to_message_id,
+          editedAt: row.message_edited_at,
+          deletedAt: row.message_deleted_at,
+          reactions: row.message_reactions ?? {},
           readAt: row.message_read_at,
           createdAt: row.message_created_at,
         }

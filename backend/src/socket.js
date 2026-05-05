@@ -63,8 +63,7 @@ function initializeSocket(server) {
     socket.on('send_message', async (payload, callback) => {
       try {
         const result = await chatsService.sendMessage(userId, payload ?? {});
-        io.to(userRoom(result.message.receiverId)).emit('message_received', result);
-        io.to(userRoom(result.message.senderId)).emit('message_received', result);
+        emitChatMessage(result);
         if (typeof callback === 'function') {
           callback({ ok: true, ...result });
         }
@@ -72,6 +71,50 @@ function initializeSocket(server) {
         if (typeof callback === 'function') {
           callback({ ok: false, message: error.message });
         }
+      }
+    });
+
+    socket.on('edit_message', async (payload, callback) => {
+      try {
+        const result = await chatsService.editMessage(
+          userId,
+          payload?.conversationId,
+          payload?.messageId,
+          payload ?? {},
+        );
+        emitChatMessageUpdated(result);
+        if (typeof callback === 'function') callback({ ok: true, ...result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, message: error.message });
+      }
+    });
+
+    socket.on('delete_message', async (payload, callback) => {
+      try {
+        const result = await chatsService.deleteMessage(
+          userId,
+          payload?.conversationId,
+          payload?.messageId,
+        );
+        emitChatMessageUpdated(result);
+        if (typeof callback === 'function') callback({ ok: true, ...result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, message: error.message });
+      }
+    });
+
+    socket.on('react_message', async (payload, callback) => {
+      try {
+        const result = await chatsService.reactToMessage(
+          userId,
+          payload?.conversationId,
+          payload?.messageId,
+          payload ?? {},
+        );
+        emitChatMessageUpdated(result);
+        if (typeof callback === 'function') callback({ ok: true, ...result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, message: error.message });
       }
     });
 
@@ -228,7 +271,14 @@ function emitChatMessage(result) {
   activeIo.to(userRoom(result.message.senderId)).emit('message_received', result);
 }
 
+function emitChatMessageUpdated(result) {
+  if (!activeIo || !result?.message) return;
+  activeIo.to(userRoom(result.message.receiverId)).emit('message_updated', result);
+  activeIo.to(userRoom(result.message.senderId)).emit('message_updated', result);
+}
+
 module.exports = {
   emitChatMessage,
+  emitChatMessageUpdated,
   initializeSocket,
 };

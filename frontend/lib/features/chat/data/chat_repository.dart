@@ -70,11 +70,16 @@ class ChatRepository {
     required String token,
     required String receiverId,
     required String content,
+    String? replyToMessageId,
   }) async {
     final json = await _apiClient.postJson(
       '/api/chats/messages',
       token: token,
-      body: {'receiverId': receiverId, 'content': content},
+      body: {
+        'receiverId': receiverId,
+        'content': content,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      },
     );
     return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
   }
@@ -111,11 +116,91 @@ class ChatRepository {
     required String token,
     required String receiverId,
     required String content,
+    String? replyToMessageId,
   }) async {
     final json = await _apiClient.postJson(
       '/api/chats/messages',
       token: token,
-      body: {'receiverId': receiverId, 'type': 'encrypted', 'content': content},
+      body: {
+        'receiverId': receiverId,
+        'type': 'encrypted',
+        'content': content,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
+  }
+
+  Future<String> uploadAudio({
+    required String token,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final json = await _apiClient.postMultipartBytes(
+      '/api/chats/audio',
+      token: token,
+      fieldName: 'audio',
+      fileName: fileName,
+      bytes: bytes,
+    );
+    return json['audioPath'] as String? ?? '';
+  }
+
+  Future<ChatMessage> sendVoiceMessage({
+    required String token,
+    required String receiverId,
+    required String audioPath,
+    String? replyToMessageId,
+  }) async {
+    final json = await _apiClient.postJson(
+      '/api/chats/messages',
+      token: token,
+      body: {
+        'receiverId': receiverId,
+        'type': 'voice',
+        'audioPath': audioPath,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> editMessage({
+    required String token,
+    required String conversationId,
+    required String messageId,
+    required String content,
+  }) async {
+    final json = await _apiClient.patchJson(
+      '/api/chats/conversations/$conversationId/messages/$messageId',
+      token: token,
+      body: {'content': content},
+    );
+    return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> deleteMessage({
+    required String token,
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final json = await _apiClient.deleteJson(
+      '/api/chats/conversations/$conversationId/messages/$messageId',
+      token: token,
+    );
+    return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> reactToMessage({
+    required String token,
+    required String conversationId,
+    required String messageId,
+    required String reaction,
+  }) async {
+    final json = await _apiClient.patchJson(
+      '/api/chats/conversations/$conversationId/messages/$messageId/reaction',
+      token: token,
+      body: {'reaction': reaction},
     );
     return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
   }

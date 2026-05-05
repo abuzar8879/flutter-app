@@ -51,10 +51,8 @@ class ChatState {
   }
 }
 
-final chatControllerProvider =
-    NotifierProvider.autoDispose.family<ChatController, ChatState, String>(
-  ChatController.new,
-);
+final chatControllerProvider = NotifierProvider.autoDispose
+    .family<ChatController, ChatState, String>(ChatController.new);
 
 class ChatController extends Notifier<ChatState> {
   ChatController(this.friendId);
@@ -71,6 +69,7 @@ class ChatController extends Notifier<ChatState> {
       _typingTimer?.cancel();
       final socket = ref.read(chatSocketServiceProvider);
       socket?.removeMessageListener(_handleSocketMessage);
+      socket?.removeMessageUpdatedListener(_handleSocketMessageUpdated);
       socket?.removeOnlineListener(_handleOnlineUsers);
       socket?.removeTypingListener(_handleTyping);
       socket?.removeStopTypingListener(_handleStopTyping);
@@ -135,6 +134,7 @@ class ChatController extends Notifier<ChatState> {
       _loadedConversationId = conversation.id;
 
       socket?.addMessageListener(_handleSocketMessage);
+      socket?.addMessageUpdatedListener(_handleSocketMessageUpdated);
       socket?.addOnlineListener(_handleOnlineUsers);
       socket?.addTypingListener(_handleTyping);
       socket?.addStopTypingListener(_handleStopTyping);
@@ -142,10 +142,7 @@ class ChatController extends Notifier<ChatState> {
 
       ref.invalidate(conversationListProvider);
     } catch (error) {
-      state = state.copyWith(
-        error: error.toString(),
-        isLoading: false,
-      );
+      state = state.copyWith(error: error.toString(), isLoading: false);
     } finally {
       _loading = false;
     }
@@ -159,6 +156,11 @@ class ChatController extends Notifier<ChatState> {
     _markRead();
   }
 
+  void _handleSocketMessageUpdated(ChatMessage message) {
+    if (state.conversationId != message.conversationId) return;
+    _replaceMessage(message);
+  }
+
   Future<void> _markRead() async {
     final session = ref.read(authControllerProvider).session;
     final conversationId = state.conversationId;
@@ -167,7 +169,9 @@ class ChatController extends Notifier<ChatState> {
     final socket = ref.read(chatSocketServiceProvider);
     socket?.sendMarkRead(friendId, conversationId);
 
-    await ref.read(chatRepositoryProvider).markConversationRead(
+    await ref
+        .read(chatRepositoryProvider)
+        .markConversationRead(
           token: session.token,
           conversationId: conversationId,
         );
@@ -187,7 +191,9 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(isLoadingOlder: true);
 
     try {
-      final olderMessages = await ref.read(chatRepositoryProvider).fetchMessages(
+      final olderMessages = await ref
+          .read(chatRepositoryProvider)
+          .fetchMessages(
             token: session.token,
             conversationId: conversationId,
             beforeId: state.messages.first.id,
@@ -232,6 +238,11 @@ class ChatController extends Notifier<ChatState> {
           createdAt: m.createdAt,
           content: m.content,
           imagePath: m.imagePath,
+          audioPath: m.audioPath,
+          replyToMessageId: m.replyToMessageId,
+          editedAt: m.editedAt,
+          deletedAt: m.deletedAt,
+          reactions: m.reactions,
           readAt: nowStr,
         );
       }
@@ -255,6 +266,88 @@ class ChatController extends Notifier<ChatState> {
   void addLocalMessage(ChatMessage message) {
     if (state.messages.any((item) => item.id == message.id)) return;
     state = state.copyWith(messages: [...state.messages, message]);
+  }
+
+  void _replaceMessage(ChatMessage message) {
+    final updated = state.messages
+        .map((item) => item.id == message.id ? message : item)
+        .toList();
+    state = state.copyWith(messages: updated);
+  }
+
+  Future<ChatMessage?> editMessage({
+    required String messageId,
+    required String content,
+  }) async {
+    final session = ref.read(authControllerProvider).session;
+    final conversationId = state.conversationId;
+    if (session == null || conversationId == null) return null;
+
+    final socket = ref.read(chatSocketServiceProvider);
+    var message = await socket?.editMessage(
+      conversationId: conversationId,
+      messageId: messageId,
+      content: content,
+    );
+    message ??= await ref
+        .read(chatRepositoryProvider)
+        .editMessage(
+          token: session.token,
+          conversationId: conversationId,
+          messageId: messageId,
+          content: content,
+        );
+    _replaceMessage(message);
+    ref.invalidate(conversationListProvider);
+    return message;
+  }
+
+  Future<ChatMessage?> deleteMessage(String messageId) async {
+    final session = ref.read(authControllerProvider).session;
+    final conversationId = state.conversationId;
+    if (session == null || conversationId == null) return null;
+
+    final socket = ref.read(chatSocketServiceProvider);
+    var message = await socket?.deleteMessage(
+      conversationId: conversationId,
+      messageId: messageId,
+    );
+    message ??= await ref
+        .read(chatRepositoryProvider)
+        .deleteMessage(
+          token: session.token,
+          conversationId: conversationId,
+          messageId: messageId,
+        );
+    _replaceMessage(message);
+    ref.invalidate(conversationListProvider);
+    return message;
+  }
+
+  Future<ChatMessage?> reactToMessage({
+    required String messageId,
+    required String reaction,
+  }) async {
+    final session = ref.read(authControllerProvider).session;
+    final conversationId = state.conversationId;
+    if (session == null || conversationId == null) return null;
+
+    final socket = ref.read(chatSocketServiceProvider);
+    var message = await socket?.reactToMessage(
+      conversationId: conversationId,
+      messageId: messageId,
+      reaction: reaction,
+    );
+    message ??= await ref
+        .read(chatRepositoryProvider)
+        .reactToMessage(
+          token: session.token,
+          conversationId: conversationId,
+          messageId: messageId,
+          reaction: reaction,
+        );
+    _replaceMessage(message);
+    return message;
   }
 
   void setSending(bool isSending) {

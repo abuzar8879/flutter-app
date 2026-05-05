@@ -55,10 +55,7 @@ final encryptionBootstrapProvider = FutureProvider<void>((ref) async {
 });
 
 class MessageDecryptionRequest {
-  const MessageDecryptionRequest({
-    required this.message,
-    required this.friend,
-  });
+  const MessageDecryptionRequest({required this.message, required this.friend});
 
   final ChatMessage message;
   final AppUser friend;
@@ -68,18 +65,30 @@ class MessageDecryptionRequest {
     return other is MessageDecryptionRequest &&
         other.message.id == message.id &&
         other.message.content == message.content &&
+        other.message.deletedAt == message.deletedAt &&
+        other.message.editedAt == message.editedAt &&
         other.friend.id == friend.id &&
         other.friend.publicKey == friend.publicKey;
   }
 
   @override
   int get hashCode {
-    return Object.hash(message.id, message.content, friend.id, friend.publicKey);
+    return Object.hash(
+      message.id,
+      message.content,
+      message.deletedAt,
+      message.editedAt,
+      friend.id,
+      friend.publicKey,
+    );
   }
 }
 
 final messagePayloadProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>, MessageDecryptionRequest>((ref, request) async {
+    .family<Map<String, dynamic>, MessageDecryptionRequest>((
+      ref,
+      request,
+    ) async {
       final content = request.message.content;
       if (request.message.type != ChatMessageType.encrypted ||
           content == null ||
@@ -88,6 +97,7 @@ final messagePayloadProvider = FutureProvider.autoDispose
           'type': request.message.type.name,
           'content': request.message.content ?? '',
           'imagePath': request.message.imagePath,
+          'audioPath': request.message.audioPath,
         };
       }
 
@@ -98,7 +108,9 @@ final messagePayloadProvider = FutureProvider.autoDispose
 
       await ref.read(encryptionBootstrapProvider.future);
       final iAmSender = session.user.id == request.message.senderId;
-      return ref.read(messageCryptoServiceProvider).decryptPayload(
+      return ref
+          .read(messageCryptoServiceProvider)
+          .decryptPayload(
             encryptedPayload: content,
             iAmSender: iAmSender,
             scopeKey: session.user.id.toString(),
@@ -111,5 +123,6 @@ final messageDecryptorProvider = FutureProvider.autoDispose
       final payload = await ref.watch(messagePayloadProvider(request).future);
       final type = payload['type'] as String? ?? 'text';
       if (type == 'image') return 'Photo';
+      if (type == 'voice') return 'Voice message';
       return payload['content'] as String? ?? '';
     });

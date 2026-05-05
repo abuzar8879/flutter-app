@@ -13,17 +13,26 @@ class ChatSocketService {
   io.Socket? _socket;
 
   final _messageListeners = <void Function(ChatMessage)>[];
+  final _messageUpdatedListeners = <void Function(ChatMessage)>[];
   final _onlineListeners = <void Function(Set<String>)>[];
-  final _typingListeners = <void Function(String userId, String conversationId)>[];
-  final _stopTypingListeners = <void Function(String userId, String conversationId)>[];
-  final _messagesReadListeners = <void Function(String conversationId, String readerId)>[];
+  final _typingListeners =
+      <void Function(String userId, String conversationId)>[];
+  final _stopTypingListeners =
+      <void Function(String userId, String conversationId)>[];
+  final _messagesReadListeners =
+      <void Function(String conversationId, String readerId)>[];
   final _onlineUserIds = <String>{};
 
   // Group chat listeners
   final _groupMessageListeners = <void Function(GroupMessage)>[];
-  final _groupTypingListeners = <void Function(String userId, String groupId)>[];
-  final _groupStopTypingListeners = <void Function(String userId, String groupId)>[];
-  final _groupReadListeners = <void Function(String groupId, String readerId, String lastReadMessageId)>[];
+  final _groupTypingListeners =
+      <void Function(String userId, String groupId)>[];
+  final _groupStopTypingListeners =
+      <void Function(String userId, String groupId)>[];
+  final _groupReadListeners =
+      <
+        void Function(String groupId, String readerId, String lastReadMessageId)
+      >[];
   Completer<void>? _connectedCompleter;
 
   void connect() {
@@ -63,6 +72,17 @@ class ChatSocketService {
           Map<String, dynamic>.from(data['message'] as Map),
         );
         for (final listener in _messageListeners) {
+          listener(message);
+        }
+      }
+    });
+
+    socket.on('message_updated', (data) {
+      if (data is Map && data['message'] is Map) {
+        final message = ChatMessage.fromJson(
+          Map<String, dynamic>.from(data['message'] as Map),
+        );
+        for (final listener in _messageUpdatedListeners) {
           listener(message);
         }
       }
@@ -188,6 +208,8 @@ class ChatSocketService {
     required String receiverId,
     String? content,
     String? imagePath,
+    String? audioPath,
+    String? replyToMessageId,
     String type = 'text',
   }) async {
     final ready = await _ensureConnected();
@@ -198,9 +220,81 @@ class ChatSocketService {
     final payload = <String, Object>{'receiverId': receiverId, 'type': type};
     if (content != null) payload['content'] = content;
     if (imagePath != null) payload['imagePath'] = imagePath;
+    if (audioPath != null) payload['audioPath'] = audioPath;
+    if (replyToMessageId != null) {
+      payload['replyToMessageId'] = replyToMessageId;
+    }
 
     socket.emitWithAck(
       'send_message',
+      payload,
+      ack: (data) {
+        if (data is Map && data['ok'] == true && data['message'] is Map) {
+          completer.complete(
+            ChatMessage.fromJson(
+              Map<String, dynamic>.from(data['message'] as Map),
+            ),
+          );
+          return;
+        }
+        completer.completeError(
+          Exception(
+            data is Map
+                ? data['message'] ?? 'Message failed.'
+                : 'Message failed.',
+          ),
+        );
+      },
+    );
+
+    return completer.future.timeout(const Duration(seconds: 8));
+  }
+
+  Future<ChatMessage?> editMessage({
+    required String conversationId,
+    required String messageId,
+    required String content,
+  }) async {
+    return _emitMessageMutation('edit_message', {
+      'conversationId': conversationId,
+      'messageId': messageId,
+      'content': content,
+    });
+  }
+
+  Future<ChatMessage?> deleteMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    return _emitMessageMutation('delete_message', {
+      'conversationId': conversationId,
+      'messageId': messageId,
+    });
+  }
+
+  Future<ChatMessage?> reactToMessage({
+    required String conversationId,
+    required String messageId,
+    required String reaction,
+  }) async {
+    return _emitMessageMutation('react_message', {
+      'conversationId': conversationId,
+      'messageId': messageId,
+      'reaction': reaction,
+    });
+  }
+
+  Future<ChatMessage?> _emitMessageMutation(
+    String event,
+    Map<String, Object> payload,
+  ) async {
+    final ready = await _ensureConnected();
+    final socket = _socket;
+    if (!ready || socket == null || socket.connected != true) return null;
+
+    final completer = Completer<ChatMessage?>();
+    socket.emitWithAck(
+      event,
       payload,
       ack: (data) {
         if (data is Map && data['ok'] == true && data['message'] is Map) {
@@ -253,7 +347,9 @@ class ChatSocketService {
         }
         completer.completeError(
           Exception(
-            data is Map ? data['message'] ?? 'Message failed.' : 'Message failed.',
+            data is Map
+                ? data['message'] ?? 'Message failed.'
+                : 'Message failed.',
           ),
         );
       },
@@ -266,7 +362,10 @@ class ChatSocketService {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
-        _socket?.emit('typing', {'receiverId': receiverId, 'conversationId': conversationId});
+        _socket?.emit('typing', {
+          'receiverId': receiverId,
+          'conversationId': conversationId,
+        });
       }),
     );
   }
@@ -275,7 +374,10 @@ class ChatSocketService {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
-        _socket?.emit('stop_typing', {'receiverId': receiverId, 'conversationId': conversationId});
+        _socket?.emit('stop_typing', {
+          'receiverId': receiverId,
+          'conversationId': conversationId,
+        });
       }),
     );
   }
@@ -284,7 +386,10 @@ class ChatSocketService {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
-        _socket?.emit('mark_read', {'senderId': senderId, 'conversationId': conversationId});
+        _socket?.emit('mark_read', {
+          'senderId': senderId,
+          'conversationId': conversationId,
+        });
       }),
     );
   }
@@ -311,7 +416,10 @@ class ChatSocketService {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
-        _socket?.emit('mark_group_read', {'groupId': groupId, 'lastReadMessageId': lastReadMessageId});
+        _socket?.emit('mark_group_read', {
+          'groupId': groupId,
+          'lastReadMessageId': lastReadMessageId,
+        });
       }),
     );
   }
@@ -329,7 +437,10 @@ class ChatSocketService {
         completer.complete(data is Map && data['ok'] == true);
       },
     );
-    return completer.future.timeout(const Duration(seconds: 8), onTimeout: () => false);
+    return completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => false,
+    );
   }
 
   void addMessageListener(void Function(ChatMessage) listener) {
@@ -338,6 +449,14 @@ class ChatSocketService {
 
   void removeMessageListener(void Function(ChatMessage) listener) {
     _messageListeners.remove(listener);
+  }
+
+  void addMessageUpdatedListener(void Function(ChatMessage) listener) {
+    _messageUpdatedListeners.add(listener);
+  }
+
+  void removeMessageUpdatedListener(void Function(ChatMessage) listener) {
+    _messageUpdatedListeners.remove(listener);
   }
 
   void addOnlineListener(void Function(Set<String>) listener) {
@@ -349,27 +468,39 @@ class ChatSocketService {
     _onlineListeners.remove(listener);
   }
 
-  void addTypingListener(void Function(String userId, String conversationId) listener) {
+  void addTypingListener(
+    void Function(String userId, String conversationId) listener,
+  ) {
     _typingListeners.add(listener);
   }
 
-  void removeTypingListener(void Function(String userId, String conversationId) listener) {
+  void removeTypingListener(
+    void Function(String userId, String conversationId) listener,
+  ) {
     _typingListeners.remove(listener);
   }
 
-  void addStopTypingListener(void Function(String userId, String conversationId) listener) {
+  void addStopTypingListener(
+    void Function(String userId, String conversationId) listener,
+  ) {
     _stopTypingListeners.add(listener);
   }
 
-  void removeStopTypingListener(void Function(String userId, String conversationId) listener) {
+  void removeStopTypingListener(
+    void Function(String userId, String conversationId) listener,
+  ) {
     _stopTypingListeners.remove(listener);
   }
 
-  void addMessagesReadListener(void Function(String conversationId, String readerId) listener) {
+  void addMessagesReadListener(
+    void Function(String conversationId, String readerId) listener,
+  ) {
     _messagesReadListeners.add(listener);
   }
 
-  void removeMessagesReadListener(void Function(String conversationId, String readerId) listener) {
+  void removeMessagesReadListener(
+    void Function(String conversationId, String readerId) listener,
+  ) {
     _messagesReadListeners.remove(listener);
   }
 
@@ -381,30 +512,40 @@ class ChatSocketService {
     _groupMessageListeners.remove(listener);
   }
 
-  void addGroupTypingListener(void Function(String userId, String groupId) listener) {
+  void addGroupTypingListener(
+    void Function(String userId, String groupId) listener,
+  ) {
     _groupTypingListeners.add(listener);
   }
 
-  void removeGroupTypingListener(void Function(String userId, String groupId) listener) {
+  void removeGroupTypingListener(
+    void Function(String userId, String groupId) listener,
+  ) {
     _groupTypingListeners.remove(listener);
   }
 
-  void addGroupStopTypingListener(void Function(String userId, String groupId) listener) {
+  void addGroupStopTypingListener(
+    void Function(String userId, String groupId) listener,
+  ) {
     _groupStopTypingListeners.add(listener);
   }
 
-  void removeGroupStopTypingListener(void Function(String userId, String groupId) listener) {
+  void removeGroupStopTypingListener(
+    void Function(String userId, String groupId) listener,
+  ) {
     _groupStopTypingListeners.remove(listener);
   }
 
   void addGroupReadListener(
-    void Function(String groupId, String readerId, String lastReadMessageId) listener,
+    void Function(String groupId, String readerId, String lastReadMessageId)
+    listener,
   ) {
     _groupReadListeners.add(listener);
   }
 
   void removeGroupReadListener(
-    void Function(String groupId, String readerId, String lastReadMessageId) listener,
+    void Function(String groupId, String readerId, String lastReadMessageId)
+    listener,
   ) {
     _groupReadListeners.remove(listener);
   }
@@ -413,6 +554,7 @@ class ChatSocketService {
     _socket?.dispose();
     _socket = null;
     _messageListeners.clear();
+    _messageUpdatedListeners.clear();
     _onlineListeners.clear();
     _typingListeners.clear();
     _stopTypingListeners.clear();
