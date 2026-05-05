@@ -8,12 +8,18 @@ const {
   pushChild,
 } = require('../../db/rtdb');
 
+function emailIndexKey(emailLower) {
+  // Firebase RTDB keys cannot include ".", so store email index with a safe key.
+  return Buffer.from(emailLower, 'utf8').toString('base64url');
+}
+
 async function createUser({ name, email, passwordHash }) {
   const emailLower = normalizeEmail(email);
   if (!emailLower) throw new Error('Email is required.');
+  const indexKey = emailIndexKey(emailLower);
 
   // Enforce uniqueness via index node
-  const existing = await getValue(`/emailToUserId/${encodeURIComponent(emailLower)}`);
+  const existing = await getValue(`/emailToUserId/${indexKey}`);
   if (existing) {
     const error = new Error('Email already exists.');
     error.code = 'EMAIL_EXISTS';
@@ -38,7 +44,7 @@ async function createUser({ name, email, passwordHash }) {
   };
 
   await setValue(`/users/${userId}`, user);
-  await setValue(`/emailToUserId/${encodeURIComponent(emailLower)}`, userId);
+  await setValue(`/emailToUserId/${indexKey}`, userId);
 
   return mapUser(user);
 }
@@ -46,8 +52,9 @@ async function createUser({ name, email, passwordHash }) {
 async function findUserByEmail(email) {
   const emailLower = normalizeEmail(email);
   if (!emailLower) return null;
+  const indexKey = emailIndexKey(emailLower);
 
-  const userId = await getValue(`/emailToUserId/${encodeURIComponent(emailLower)}`);
+  const userId = await getValue(`/emailToUserId/${indexKey}`);
   if (!userId) return null;
 
   const user = await getValue(`/users/${userId}`);
