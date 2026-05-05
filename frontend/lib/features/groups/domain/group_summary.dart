@@ -12,9 +12,9 @@ class GroupSummary {
     this.lastMessage,
   });
 
-  final int id;
+  final String id;
   final String name;
-  final int createdBy;
+  final String createdBy;
   final String updatedAt;
   final int unreadCount;
   final int memberCount;
@@ -27,8 +27,8 @@ class GroupSummary {
       name: json['name'] as String? ?? '',
       createdBy: _readId(json['createdBy']),
       updatedAt: json['updatedAt'] as String? ?? '',
-      unreadCount: _readId(json['unreadCount']),
-      memberCount: _readId(json['memberCount']),
+      unreadCount: json['unreadCount'] is num ? (json['unreadCount'] as num).toInt() : 0,
+      memberCount: json['memberCount'] is num ? (json['memberCount'] as num).toInt() : 0,
       lastMessage: lastMessageJson is Map<String, dynamic>
           ? GroupMessage.fromJson(lastMessageJson)
           : null,
@@ -46,7 +46,7 @@ class GroupInvite {
     required this.invitedBy,
   });
 
-  final int groupId;
+  final String groupId;
   final String groupName;
   final String invitedAt;
   final AppUser? invitedBy;
@@ -64,9 +64,8 @@ class GroupInvite {
   }
 }
 
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
+String _readId(Object? value) {
+  if (value == null) return '';
+  return value.toString();
 }
 

@@ -13,9 +13,9 @@ class GroupMessage {
     this.imagePath,
   });
 
-  final int id;
-  final int groupId;
-  final int senderId;
+  final String id;
+  final String groupId;
+  final String senderId;
   final GroupMessageType type;
   final String createdAt;
   final String? content;
@@ -44,10 +44,9 @@ class GroupMessage {
   }
 }
 
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
+String _readId(Object? value) {
+  if (value == null) return '';
+  return value.toString();
 }
 
 DateTime _parseDateTime(String value) {

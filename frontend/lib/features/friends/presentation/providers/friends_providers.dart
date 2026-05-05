@@ -24,9 +24,10 @@ final pendingRequestsProvider = FutureProvider<List<FriendRequest>>((
 final myFriendsProvider = FutureProvider<List<AppUser>>((ref) async {
   final session = ref.watch(authControllerProvider).session;
   if (session == null) throw Exception('Not authenticated');
-  return ref
+  final friends = await ref
       .read(friendsRepositoryProvider)
       .fetchMyFriends(token: session.token);
+  return friends.where((f) => f.id != session.user.id).toList();
 });
 
 class FriendsNotifier extends AsyncNotifier<void> {

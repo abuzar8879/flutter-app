@@ -425,7 +425,7 @@ class ChatSocketService {
   }
 
   void _notifyOnline() {
-    final snapshot = Set<int>.unmodifiable(_onlineUserIds);
+    final snapshot = Set<String>.unmodifiable(_onlineUserIds);
     for (final listener in _onlineListeners) {
       listener(snapshot);
     }

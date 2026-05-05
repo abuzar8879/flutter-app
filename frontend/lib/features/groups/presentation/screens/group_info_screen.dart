@@ -28,7 +28,7 @@ class GroupInfoScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Group info')),
       body: members.when(
         data: (items) {
-          final me = items.where((m) => m.userId == (session?.user.id ?? 0)).toList();
+          final me = items.where((m) => m.userId == (session?.user.id ?? '')).toList();
           final isAdmin = me.isNotEmpty && me.first.role == 'admin' && me.first.status == 'accepted';
 
           return ListView(
@@ -46,7 +46,7 @@ class GroupInfoScreen extends ConsumerWidget {
                   onPressed: () async {
                     final friends = await ref.read(myFriendsProvider.future);
                     if (!context.mounted) return;
-                    final selected = await showModalBottomSheet<Set<int>>(
+                    final selected = await showModalBottomSheet<Set<String>>(
                       context: context,
                       isScrollControlled: true,
                       builder: (_) => _InvitePickerSheet(friends: friends),
@@ -118,7 +118,7 @@ class _InvitePickerSheet extends StatefulWidget {
 }
 
 class _InvitePickerSheetState extends State<_InvitePickerSheet> {
-  final _selected = <int>{};
+  final _selected = <String>{};
 
   @override
   Widget build(BuildContext context) {

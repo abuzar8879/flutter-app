@@ -13,7 +13,7 @@ class GroupsRepository {
   Future<GroupSummary> createGroup({
     required String token,
     String? name,
-    required List<int> inviteeIds,
+    required List<String> inviteeIds,
   }) async {
     final json = await _apiClient.postJson(
       '/api/groups',
@@ -44,19 +44,19 @@ class GroupsRepository {
     return list.map((e) => GroupInvite.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<void> acceptInvite({required String token, required int groupId}) async {
+  Future<void> acceptInvite({required String token, required String groupId}) async {
     await _apiClient.postJson('/api/groups/$groupId/invites/accept', token: token);
   }
 
-  Future<void> rejectInvite({required String token, required int groupId}) async {
+  Future<void> rejectInvite({required String token, required String groupId}) async {
     await _apiClient.postJson('/api/groups/$groupId/invites/reject', token: token);
   }
 
   Future<List<GroupMessage>> fetchMessages({
     required String token,
-    required int groupId,
+    required String groupId,
     int limit = 50,
-    int? beforeId,
+    String? beforeId,
   }) async {
     final beforeQuery = beforeId == null ? '' : '&beforeId=$beforeId';
     final json = await _apiClient.getJson(
@@ -71,7 +71,7 @@ class GroupsRepository {
 
   Future<List<GroupMember>> listMembers({
     required String token,
-    required int groupId,
+    required String groupId,
   }) async {
     final json = await _apiClient.getJson('/api/groups/$groupId/members', token: token);
     final list = json['members'] as List<dynamic>? ?? [];
@@ -80,8 +80,8 @@ class GroupsRepository {
 
   Future<void> inviteMembers({
     required String token,
-    required int groupId,
-    required List<int> inviteeIds,
+    required String groupId,
+    required List<String> inviteeIds,
   }) async {
     await _apiClient.postJson(
       '/api/groups/$groupId/invites',
@@ -92,15 +92,15 @@ class GroupsRepository {
 
   Future<void> removeMember({
     required String token,
-    required int groupId,
-    required int userId,
+    required String groupId,
+    required String userId,
   }) async {
     await _apiClient.deleteJson('/api/groups/$groupId/members/$userId', token: token);
   }
 
   Future<GroupMessage> sendMessage({
     required String token,
-    required int groupId,
+    required String groupId,
     required String type,
     String? content,
     String? imagePath,
@@ -115,8 +115,8 @@ class GroupsRepository {
 
   Future<void> markRead({
     required String token,
-    required int groupId,
-    required int lastReadMessageId,
+    required String groupId,
+    required String lastReadMessageId,
   }) async {
     await _apiClient.patchJson(
       '/api/groups/$groupId/read',

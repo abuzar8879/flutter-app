@@ -9,8 +9,8 @@ class GroupMember {
     this.user,
   });
 
-  final int groupId;
-  final int userId;
+  final String groupId;
+  final String userId;
   final String role; // admin | member
   final String status; // invited | accepted
   final AppUser? user;
@@ -28,9 +28,8 @@ class GroupMember {
   }
 }
 
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
+String _readId(Object? value) {
+  if (value == null) return '';
+  return value.toString();
 }
 

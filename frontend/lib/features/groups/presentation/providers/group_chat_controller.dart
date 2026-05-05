@@ -21,7 +21,7 @@ class GroupChatState {
   final bool isLoading;
   final bool isLoadingOlder;
   final bool isSending;
-  final Set<int> typingUserIds;
+  final Set<String> typingUserIds;
   final String? error;
 
   GroupChatState copyWith({
@@ -29,7 +29,7 @@ class GroupChatState {
     bool? isLoading,
     bool? isLoadingOlder,
     bool? isSending,
-    Set<int>? typingUserIds,
+    Set<String>? typingUserIds,
     String? error,
   }) {
     return GroupChatState(
@@ -44,14 +44,14 @@ class GroupChatState {
 }
 
 final groupChatControllerProvider =
-    NotifierProvider.autoDispose.family<GroupChatController, GroupChatState, int>(
+    NotifierProvider.autoDispose.family<GroupChatController, GroupChatState, String>(
   GroupChatController.new,
 );
 
 class GroupChatController extends Notifier<GroupChatState> {
   GroupChatController(this.groupId);
 
-  final int groupId;
+  final String groupId;
   Timer? _typingTimer;
   bool _loading = false;
   bool _loadScheduled = false;
@@ -124,19 +124,19 @@ class GroupChatController extends Notifier<GroupChatState> {
     ref.invalidate(groupListProvider);
   }
 
-  void _onGroupTyping(int userId, int gId) {
+  void _onGroupTyping(String userId, String gId) {
     if (gId != groupId) return;
     final currentUserId = ref.read(authControllerProvider).session?.user.id;
     if (currentUserId != null && userId == currentUserId) return;
-    final next = Set<int>.from(state.typingUserIds)..add(userId);
+    final next = Set<String>.from(state.typingUserIds)..add(userId);
     state = state.copyWith(typingUserIds: next);
   }
 
-  void _onGroupStopTyping(int userId, int gId) {
+  void _onGroupStopTyping(String userId, String gId) {
     if (gId != groupId) return;
     final currentUserId = ref.read(authControllerProvider).session?.user.id;
     if (currentUserId != null && userId == currentUserId) return;
-    final next = Set<int>.from(state.typingUserIds)..remove(userId);
+    final next = Set<String>.from(state.typingUserIds)..remove(userId);
     state = state.copyWith(typingUserIds: next);
   }
 

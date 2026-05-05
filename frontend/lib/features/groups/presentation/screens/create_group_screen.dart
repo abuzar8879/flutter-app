@@ -16,7 +16,7 @@ class CreateGroupScreen extends ConsumerStatefulWidget {
 
 class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   final _nameController = TextEditingController();
-  final _selected = <int>{};
+  final _selected = <String>{};
 
   @override
   void dispose() {

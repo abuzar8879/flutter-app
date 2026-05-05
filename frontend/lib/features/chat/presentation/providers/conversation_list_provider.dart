@@ -11,7 +11,9 @@ final conversationListProvider = FutureProvider<List<ConversationSummary>>((
   if (session == null) throw Exception('Not authenticated');
   ref.watch(encryptionBootstrapProvider);
 
-  return ref
+  final conversations = await ref
       .read(chatRepositoryProvider)
       .fetchConversations(token: session.token);
+  
+  return conversations.where((c) => c.friend.id != session.user.id).toList();
 });

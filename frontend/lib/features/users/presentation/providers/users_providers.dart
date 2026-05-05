@@ -28,7 +28,10 @@ final allUsersProvider = FutureProvider<List<AppUser>>((ref) async {
   if (session == null) throw Exception('Not authenticated');
 
   final search = ref.watch(usersSearchQueryProvider);
-  return ref
+  final users = await ref
       .read(usersRepositoryProvider)
       .fetchAllUsers(token: session.token, search: search);
+  
+  // Filter out the current user from discovery.
+  return users.where((u) => u.id != session.user.id).toList();
 });

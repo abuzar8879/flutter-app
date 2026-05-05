@@ -42,7 +42,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
     ref.invalidate(groupListProvider);
   }
 
-  void _handleGroupRead(int groupId, int readerId, int lastReadMessageId) {
+  void _handleGroupRead(String groupId, String readerId, String lastReadMessageId) {
     ref.invalidate(groupListProvider);
   }
 

@@ -98,6 +98,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       chatNotifier.addLocalMessage(message);
       _messageController.clear();
       _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Failed to send message.')),
+        );
+      }
     } finally {
       if (mounted) {
         chatNotifier.setSending(false);
@@ -149,6 +155,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
       chatNotifier.addLocalMessage(message);
       _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Failed to send image.')),
+        );
+      }
     } finally {
       if (mounted) {
         chatNotifier.setSending(false);
@@ -205,6 +217,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _scrollToBottom();
     }
 
+    final isSelf = widget.friend.id == currentUserId;
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -225,7 +239,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                 ),
-                if (chatState.isFriendOnline)
+                if (chatState.isFriendOnline && !isSelf)
                   Positioned(
                     right: 0,
                     bottom: 0,
@@ -250,9 +264,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  chatState.isFriendOnline ? 'Online' : 'Offline',
+                  isSelf ? 'You' : (chatState.isFriendOnline ? 'Online' : 'Offline'),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: chatState.isFriendOnline ? Colors.green : theme.colorScheme.onSurface.withOpacity(0.5),
+                    color: (chatState.isFriendOnline && !isSelf) ? Colors.green : theme.colorScheme.onSurface.withOpacity(0.5),
                   ),
                 ),
               ],
@@ -260,8 +274,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.videocam_rounded), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.call_rounded), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.videocam_rounded), onPressed: isSelf ? null : () {}),
+          IconButton(icon: const Icon(Icons.call_rounded), onPressed: isSelf ? null : () {}),
           const SizedBox(width: 8),
         ],
       ),
@@ -269,27 +283,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface.withOpacity(0.5),
         ),
-        child: Column(
-          children: [
-            Expanded(child: _buildMessages(currentUserId, chatState)),
-            if (chatState.isFriendTyping)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  children: [
-                    Text(
-                      '${widget.friend.name} is typing...',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        fontStyle: FontStyle.italic,
+        child: isSelf
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.person_off_rounded, size: 64, color: theme.colorScheme.error.withOpacity(0.2)),
+                      const SizedBox(height: 16),
+                      Text(
+                        'You cannot chat with yourself.',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Please select a friend to start a conversation.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : Column(
+                children: [
+                  Expanded(child: _buildMessages(currentUserId, chatState)),
+                  if (chatState.isFriendTyping)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${widget.friend.name} is typing...',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withOpacity(0.5),
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  _buildInputArea(theme, chatState),
+                ],
               ),
-            _buildInputArea(theme, chatState),
-          ],
-        ),
       ),
     );
   }

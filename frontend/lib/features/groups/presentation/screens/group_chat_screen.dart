@@ -12,7 +12,7 @@ import '../providers/group_chat_controller.dart';
 import '../providers/groups_providers.dart';
 import 'group_info_screen.dart';
 
-final _groupMembersProvider = FutureProvider.family<List<GroupMember>, int>((ref, groupId) async {
+final _groupMembersProvider = FutureProvider.family<List<GroupMember>, String>((ref, groupId) async {
   final session = ref.watch(authControllerProvider).session;
   if (session == null) return const [];
   return ref.read(groupsRepositoryProvider).listMembers(
@@ -141,7 +141,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = ref.watch(authControllerProvider).session?.user.id ?? 0;
+    final currentUserId = ref.watch(authControllerProvider).session?.user.id ?? '';
     final chatState = ref.watch(groupChatControllerProvider(widget.group.id));
     final members = ref.watch(_groupMembersProvider(widget.group.id));
     final theme = Theme.of(context);
