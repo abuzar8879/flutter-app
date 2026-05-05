@@ -37,7 +37,6 @@ class ChatSocketService {
     final socket = io.io(
       AppConfig.apiBaseUrl,
       io.OptionBuilder()
-          .setTransports(['websocket'])
           .enableReconnection()
           .setReconnectionAttempts(9999)
           .setReconnectionDelay(800)

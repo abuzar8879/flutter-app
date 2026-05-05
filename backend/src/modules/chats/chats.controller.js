@@ -1,5 +1,6 @@
 const path = require('path');
 const chatsService = require('./chats.service');
+const { emitChatMessage } = require('../../socket');
 
 async function createConversation(request, response, next) {
   try {
@@ -53,6 +54,7 @@ async function markConversationRead(request, response, next) {
 async function sendMessage(request, response, next) {
   try {
     const result = await chatsService.sendMessage(request.user.sub, request.body);
+    emitChatMessage(result);
     response.status(201).json(result);
   } catch (error) {
     next(error);

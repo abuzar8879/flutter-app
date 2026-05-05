@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../data/chat_socket_service.dart';
 import '../../domain/chat_message.dart';
 import '../../domain/conversation_summary.dart';
 import '../../../groups/presentation/providers/groups_providers.dart';
@@ -19,19 +20,27 @@ class ChatListScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatListScreenState extends ConsumerState<ChatListScreen> {
+  ChatSocketService? _socket;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
-      final socket = ref.read(chatSocketServiceProvider);
-      socket?.addMessageListener(_handleNewMessage);
+      _setSocket(ref.read(chatSocketServiceProvider));
     });
   }
 
   @override
   void dispose() {
-    ref.read(chatSocketServiceProvider)?.removeMessageListener(_handleNewMessage);
+    _setSocket(null);
     super.dispose();
+  }
+
+  void _setSocket(ChatSocketService? socket) {
+    if (_socket == socket) return;
+    _socket?.removeMessageListener(_handleNewMessage);
+    _socket = socket;
+    _socket?.addMessageListener(_handleNewMessage);
   }
 
   void _handleNewMessage(ChatMessage message) {
@@ -40,6 +49,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<ChatSocketService?>(chatSocketServiceProvider, (_, next) {
+      _setSocket(next);
+    });
     ref.watch(encryptionBootstrapProvider);
     final conversations = ref.watch(conversationListProvider);
     final invites = ref.watch(groupInvitesProvider);

@@ -5,6 +5,7 @@ const chatsService = require('./modules/chats/chats.service');
 const groupsService = require('./modules/groups/groups.service');
 
 const onlineUsers = new Map();
+let activeIo = null;
 
 function userRoom(userId) {
   return `user:${userId}`;
@@ -20,6 +21,7 @@ function initializeSocket(server) {
       origin: env.frontendOrigin,
     },
   });
+  activeIo = io;
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -220,6 +222,13 @@ function initializeSocket(server) {
   return io;
 }
 
+function emitChatMessage(result) {
+  if (!activeIo || !result?.message) return;
+  activeIo.to(userRoom(result.message.receiverId)).emit('message_received', result);
+  activeIo.to(userRoom(result.message.senderId)).emit('message_received', result);
+}
+
 module.exports = {
+  emitChatMessage,
   initializeSocket,
 };
