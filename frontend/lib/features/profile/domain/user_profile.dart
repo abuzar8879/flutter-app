@@ -19,7 +19,7 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: json['id'] as int? ?? 0,
+      id: _readId(json['id']),
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       avatarPath: json['avatarPath'] as String?,
@@ -28,4 +28,10 @@ class UserProfile {
       updatedAt: json['updatedAt'] as String? ?? '',
     );
   }
+}
+
+int _readId(Object? value) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
 }
