@@ -9,7 +9,7 @@ class UserProfile {
     this.publicKey,
   });
 
-  final int id;
+  final String id;
   final String name;
   final String email;
   final String createdAt;
@@ -19,7 +19,7 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: _readId(json['id']),
+      id: (json['id'] ?? '').toString(),
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       avatarPath: json['avatarPath'] as String?,
@@ -28,10 +28,4 @@ class UserProfile {
       updatedAt: json['updatedAt'] as String? ?? '',
     );
   }
-}
-
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
 }

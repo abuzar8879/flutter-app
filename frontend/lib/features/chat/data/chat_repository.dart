@@ -12,7 +12,7 @@ class ChatRepository {
 
   Future<Conversation> getOrCreateConversation({
     required String token,
-    required int friendId,
+    required String friendId,
   }) async {
     final json = await _apiClient.postJson(
       '/api/chats/conversations',
@@ -41,9 +41,9 @@ class ChatRepository {
 
   Future<List<ChatMessage>> fetchMessages({
     required String token,
-    required int conversationId,
+    required String conversationId,
     int limit = 50,
-    int? beforeId,
+    String? beforeId,
   }) async {
     final beforeQuery = beforeId == null ? '' : '&beforeId=$beforeId';
     final json = await _apiClient.getJson(
@@ -58,7 +58,7 @@ class ChatRepository {
 
   Future<void> markConversationRead({
     required String token,
-    required int conversationId,
+    required String conversationId,
   }) async {
     await _apiClient.patchJson(
       '/api/chats/conversations/$conversationId/read',
@@ -68,7 +68,7 @@ class ChatRepository {
 
   Future<ChatMessage> sendTextMessage({
     required String token,
-    required int receiverId,
+    required String receiverId,
     required String content,
   }) async {
     final json = await _apiClient.postJson(
@@ -96,7 +96,7 @@ class ChatRepository {
 
   Future<ChatMessage> sendImageMessage({
     required String token,
-    required int receiverId,
+    required String receiverId,
     required String imagePath,
   }) async {
     final json = await _apiClient.postJson(
@@ -109,7 +109,7 @@ class ChatRepository {
 
   Future<ChatMessage> sendEncryptedMessage({
     required String token,
-    required int receiverId,
+    required String receiverId,
     required String content,
   }) async {
     final json = await _apiClient.postJson(

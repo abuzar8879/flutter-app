@@ -10,7 +10,7 @@ class ConversationSummary {
     this.lastMessage,
   });
 
-  final int id;
+  final String id;
   final AppUser friend;
   final int unreadCount;
   final String updatedAt;
@@ -19,9 +19,9 @@ class ConversationSummary {
   factory ConversationSummary.fromJson(Map<String, dynamic> json) {
     final messageJson = json['lastMessage'];
     return ConversationSummary(
-      id: _readId(json['id']),
+      id: (json['id'] ?? '').toString(),
       friend: AppUser.fromJson(json['friend'] as Map<String, dynamic>),
-      unreadCount: _readId(json['unreadCount']),
+      unreadCount: _readInt(json['unreadCount']),
       updatedAt: json['updatedAt'] as String? ?? '',
       lastMessage: messageJson is Map<String, dynamic>
           ? ChatMessage.fromJson(messageJson)
@@ -30,7 +30,7 @@ class ConversationSummary {
   }
 }
 
-int _readId(Object? value) {
+int _readInt(Object? value) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? 0;
   return 0;

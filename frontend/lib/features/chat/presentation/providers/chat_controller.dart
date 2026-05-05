@@ -20,7 +20,7 @@ class ChatState {
   });
 
   final List<ChatMessage> messages;
-  final int? conversationId;
+  final String? conversationId;
   final bool isLoading;
   final bool isLoadingOlder;
   final bool isSending;
@@ -30,7 +30,7 @@ class ChatState {
 
   ChatState copyWith({
     List<ChatMessage>? messages,
-    int? conversationId,
+    String? conversationId,
     bool? isLoading,
     bool? isLoadingOlder,
     bool? isSending,
@@ -52,18 +52,18 @@ class ChatState {
 }
 
 final chatControllerProvider =
-    NotifierProvider.autoDispose.family<ChatController, ChatState, int>(
+    NotifierProvider.autoDispose.family<ChatController, ChatState, String>(
   ChatController.new,
 );
 
 class ChatController extends Notifier<ChatState> {
   ChatController(this.friendId);
 
-  final int friendId;
+  final String friendId;
   Timer? _typingTimer;
   bool _loadScheduled = false;
   bool _loading = false;
-  int? _loadedConversationId;
+  String? _loadedConversationId;
 
   @override
   ChatState build() {
@@ -201,23 +201,23 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  void _handleOnlineUsers(Set<int> userIds) {
+  void _handleOnlineUsers(Set<String> userIds) {
     state = state.copyWith(isFriendOnline: userIds.contains(friendId));
   }
 
-  void _handleTyping(int userId, int conversationId) {
+  void _handleTyping(String userId, String conversationId) {
     if (userId == friendId && conversationId == state.conversationId) {
       state = state.copyWith(isFriendTyping: true);
     }
   }
 
-  void _handleStopTyping(int userId, int conversationId) {
+  void _handleStopTyping(String userId, String conversationId) {
     if (userId == friendId && conversationId == state.conversationId) {
       state = state.copyWith(isFriendTyping: false);
     }
   }
 
-  void _handleMessagesRead(int conversationId, int readerId) {
+  void _handleMessagesRead(String conversationId, String readerId) {
     if (conversationId != state.conversationId || readerId != friendId) return;
 
     final nowStr = DateTime.now().toIso8601String();

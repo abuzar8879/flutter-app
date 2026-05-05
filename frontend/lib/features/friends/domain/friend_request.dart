@@ -12,9 +12,9 @@ class FriendRequest {
     this.sender,
   });
 
-  final int id;
-  final int senderId;
-  final int receiverId;
+  final String id;
+  final String senderId;
+  final String receiverId;
   final FriendRequestStatus status;
   final String createdAt;
   final AppUser? sender;
@@ -34,18 +34,12 @@ class FriendRequest {
     }
 
     return FriendRequest(
-      id: _readId(json['id']),
-      senderId: _readId(json['senderId']),
-      receiverId: _readId(json['receiverId']),
+      id: (json['id'] ?? '').toString(),
+      senderId: (json['senderId'] ?? '').toString(),
+      receiverId: (json['receiverId'] ?? '').toString(),
       status: status,
       createdAt: json['createdAt'] as String? ?? '',
       sender: sender,
     );
   }
-}
-
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
 }

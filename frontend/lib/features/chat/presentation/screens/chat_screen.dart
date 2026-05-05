@@ -179,7 +179,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .encryptPayload(
           remotePublicKey: publicKey,
           payload: payload,
-          scopeKey: session.user.id.toString(),
+          scopeKey: session.user.id,
         );
   }
 
@@ -196,7 +196,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_isNearBottom()) _scrollToBottom();
     });
 
-    final currentUserId = ref.watch(authControllerProvider).session?.user.id ?? 0;
+    final currentUserId = ref.watch(authControllerProvider).session?.user.id ?? '';
     final chatState = ref.watch(chatControllerProvider(widget.friend.id));
     final theme = Theme.of(context);
 
@@ -372,7 +372,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessages(int currentUserId, ChatState chatState) {
+  Widget _buildMessages(String currentUserId, ChatState chatState) {
     if (chatState.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }

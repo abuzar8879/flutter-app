@@ -33,7 +33,7 @@ class FriendsNotifier extends AsyncNotifier<void> {
   @override
   Future<void> build() async {}
 
-  Future<String> sendRequest(int receiverId) async {
+  Future<String> sendRequest(String receiverId) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) throw Exception('Not authenticated');
 
@@ -57,17 +57,17 @@ class FriendsNotifier extends AsyncNotifier<void> {
     }
   }
 
-  Future<void> acceptRequest(int requestId) async {
+  Future<void> acceptRequest(String requestId) async {
     await _respond(requestId: requestId, action: 'accepted');
     ref.invalidate(myFriendsProvider);
   }
 
-  Future<void> rejectRequest(int requestId) async {
+  Future<void> rejectRequest(String requestId) async {
     await _respond(requestId: requestId, action: 'rejected');
   }
 
   Future<void> _respond({
-    required int requestId,
+    required String requestId,
     required String action,
   }) async {
     final session = ref.read(authControllerProvider).session;

@@ -5,11 +5,12 @@ async function sendRequest(request, response, next) {
     const senderId = request.user.sub;
     const { receiverId } = request.body;
 
-    if (!receiverId) {
+    const receiverStr = String(receiverId ?? '').trim();
+    if (!receiverStr || receiverStr === '0') {
       return response.status(400).json({ message: 'receiverId is required.' });
     }
 
-    const result = await friendsService.sendRequest(senderId, Number(receiverId));
+    const result = await friendsService.sendRequest(senderId, receiverStr);
     return response.status(201).json({ request: result });
   } catch (error) {
     return next(error);
@@ -26,7 +27,7 @@ async function respondToRequest(request, response, next) {
       return response.status(400).json({ message: 'action is required (accepted | rejected).' });
     }
 
-    const result = await friendsService.respondToRequest(Number(id), receiverId, action);
+    const result = await friendsService.respondToRequest(String(id), receiverId, action);
     return response.status(200).json({ request: result });
   } catch (error) {
     return next(error);

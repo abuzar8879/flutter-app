@@ -15,10 +15,10 @@ class ChatMessage {
     this.readAt,
   });
 
-  final int id;
-  final int conversationId;
-  final int senderId;
-  final int receiverId;
+  final String id;
+  final String conversationId;
+  final String senderId;
+  final String receiverId;
   final ChatMessageType type;
   final String createdAt;
   final String? content;
@@ -33,10 +33,10 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
-      id: _readId(json['id']),
-      conversationId: _readId(json['conversationId']),
-      senderId: _readId(json['senderId']),
-      receiverId: _readId(json['receiverId']),
+      id: (json['id'] ?? '').toString(),
+      conversationId: (json['conversationId'] ?? '').toString(),
+      senderId: (json['senderId'] ?? '').toString(),
+      receiverId: (json['receiverId'] ?? '').toString(),
       type: switch (json['type']) {
         'image' => ChatMessageType.image,
         'encrypted' => ChatMessageType.encrypted,
@@ -48,12 +48,6 @@ class ChatMessage {
       readAt: json['readAt'] as String?,
     );
   }
-}
-
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
 }
 
 DateTime _parseDateTime(String value) {

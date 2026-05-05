@@ -9,7 +9,7 @@ class FriendsRepository {
 
   Future<FriendRequest> sendRequest({
     required String token,
-    required int receiverId,
+    required String receiverId,
   }) async {
     final json = await _apiClient.postJson(
       '/api/friends/requests',
@@ -21,7 +21,7 @@ class FriendsRepository {
 
   Future<FriendRequest> respondToRequest({
     required String token,
-    required int requestId,
+    required String requestId,
     required String action, // 'accepted' | 'rejected'
   }) async {
     final json = await _apiClient.patchJson(

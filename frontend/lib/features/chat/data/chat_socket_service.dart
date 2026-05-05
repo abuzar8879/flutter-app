@@ -13,17 +13,17 @@ class ChatSocketService {
   io.Socket? _socket;
 
   final _messageListeners = <void Function(ChatMessage)>[];
-  final _onlineListeners = <void Function(Set<int>)>[];
-  final _typingListeners = <void Function(int userId, int conversationId)>[];
-  final _stopTypingListeners = <void Function(int userId, int conversationId)>[];
-  final _messagesReadListeners = <void Function(int conversationId, int readerId)>[];
-  final _onlineUserIds = <int>{};
+  final _onlineListeners = <void Function(Set<String>)>[];
+  final _typingListeners = <void Function(String userId, String conversationId)>[];
+  final _stopTypingListeners = <void Function(String userId, String conversationId)>[];
+  final _messagesReadListeners = <void Function(String conversationId, String readerId)>[];
+  final _onlineUserIds = <String>{};
 
   // Group chat listeners
   final _groupMessageListeners = <void Function(GroupMessage)>[];
-  final _groupTypingListeners = <void Function(int userId, int groupId)>[];
-  final _groupStopTypingListeners = <void Function(int userId, int groupId)>[];
-  final _groupReadListeners = <void Function(int groupId, int readerId, int lastReadMessageId)>[];
+  final _groupTypingListeners = <void Function(String userId, String groupId)>[];
+  final _groupStopTypingListeners = <void Function(String userId, String groupId)>[];
+  final _groupReadListeners = <void Function(String groupId, String readerId, String lastReadMessageId)>[];
   Completer<void>? _connectedCompleter;
 
   void connect() {
@@ -79,7 +79,7 @@ class ChatSocketService {
 
     socket.on('user_online', (data) {
       final id = _readId(data is Map ? data['userId'] : null);
-      if (id > 0) {
+      if (id.isNotEmpty) {
         _onlineUserIds.add(id);
         _notifyOnline();
       }
@@ -87,7 +87,7 @@ class ChatSocketService {
 
     socket.on('user_offline', (data) {
       final id = _readId(data is Map ? data['userId'] : null);
-      if (id > 0) {
+      if (id.isNotEmpty) {
         _onlineUserIds.remove(id);
         _notifyOnline();
       }
@@ -186,7 +186,7 @@ class ChatSocketService {
   }
 
   Future<ChatMessage?> sendMessage({
-    required int receiverId,
+    required String receiverId,
     String? content,
     String? imagePath,
     String type = 'text',
@@ -226,7 +226,7 @@ class ChatSocketService {
   }
 
   Future<GroupMessage?> sendGroupMessage({
-    required int groupId,
+    required String groupId,
     String? content,
     String? imagePath,
     String type = 'text',
@@ -263,7 +263,7 @@ class ChatSocketService {
     return completer.future.timeout(const Duration(seconds: 8));
   }
 
-  void sendTyping(int receiverId, int conversationId) {
+  void sendTyping(String receiverId, String conversationId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -272,7 +272,7 @@ class ChatSocketService {
     );
   }
 
-  void sendStopTyping(int receiverId, int conversationId) {
+  void sendStopTyping(String receiverId, String conversationId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -281,7 +281,7 @@ class ChatSocketService {
     );
   }
 
-  void sendMarkRead(int senderId, int conversationId) {
+  void sendMarkRead(String senderId, String conversationId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -290,7 +290,7 @@ class ChatSocketService {
     );
   }
 
-  void sendGroupTyping(int groupId) {
+  void sendGroupTyping(String groupId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -299,7 +299,7 @@ class ChatSocketService {
     );
   }
 
-  void sendGroupStopTyping(int groupId) {
+  void sendGroupStopTyping(String groupId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -308,7 +308,7 @@ class ChatSocketService {
     );
   }
 
-  void sendMarkGroupRead(int groupId, int lastReadMessageId) {
+  void sendMarkGroupRead(String groupId, String lastReadMessageId) {
     unawaited(
       _ensureConnected().then((ready) {
         if (!ready) return;
@@ -317,7 +317,7 @@ class ChatSocketService {
     );
   }
 
-  Future<bool> joinGroup(int groupId) async {
+  Future<bool> joinGroup(String groupId) async {
     final ready = await _ensureConnected();
     final socket = _socket;
     if (!ready || socket == null || socket.connected != true) return false;
@@ -341,36 +341,36 @@ class ChatSocketService {
     _messageListeners.remove(listener);
   }
 
-  void addOnlineListener(void Function(Set<int>) listener) {
+  void addOnlineListener(void Function(Set<String>) listener) {
     _onlineListeners.add(listener);
     listener(Set.unmodifiable(_onlineUserIds));
   }
 
-  void removeOnlineListener(void Function(Set<int>) listener) {
+  void removeOnlineListener(void Function(Set<String>) listener) {
     _onlineListeners.remove(listener);
   }
 
-  void addTypingListener(void Function(int userId, int conversationId) listener) {
+  void addTypingListener(void Function(String userId, String conversationId) listener) {
     _typingListeners.add(listener);
   }
 
-  void removeTypingListener(void Function(int userId, int conversationId) listener) {
+  void removeTypingListener(void Function(String userId, String conversationId) listener) {
     _typingListeners.remove(listener);
   }
 
-  void addStopTypingListener(void Function(int userId, int conversationId) listener) {
+  void addStopTypingListener(void Function(String userId, String conversationId) listener) {
     _stopTypingListeners.add(listener);
   }
 
-  void removeStopTypingListener(void Function(int userId, int conversationId) listener) {
+  void removeStopTypingListener(void Function(String userId, String conversationId) listener) {
     _stopTypingListeners.remove(listener);
   }
 
-  void addMessagesReadListener(void Function(int conversationId, int readerId) listener) {
+  void addMessagesReadListener(void Function(String conversationId, String readerId) listener) {
     _messagesReadListeners.add(listener);
   }
 
-  void removeMessagesReadListener(void Function(int conversationId, int readerId) listener) {
+  void removeMessagesReadListener(void Function(String conversationId, String readerId) listener) {
     _messagesReadListeners.remove(listener);
   }
 
@@ -382,30 +382,30 @@ class ChatSocketService {
     _groupMessageListeners.remove(listener);
   }
 
-  void addGroupTypingListener(void Function(int userId, int groupId) listener) {
+  void addGroupTypingListener(void Function(String userId, String groupId) listener) {
     _groupTypingListeners.add(listener);
   }
 
-  void removeGroupTypingListener(void Function(int userId, int groupId) listener) {
+  void removeGroupTypingListener(void Function(String userId, String groupId) listener) {
     _groupTypingListeners.remove(listener);
   }
 
-  void addGroupStopTypingListener(void Function(int userId, int groupId) listener) {
+  void addGroupStopTypingListener(void Function(String userId, String groupId) listener) {
     _groupStopTypingListeners.add(listener);
   }
 
-  void removeGroupStopTypingListener(void Function(int userId, int groupId) listener) {
+  void removeGroupStopTypingListener(void Function(String userId, String groupId) listener) {
     _groupStopTypingListeners.remove(listener);
   }
 
   void addGroupReadListener(
-    void Function(int groupId, int readerId, int lastReadMessageId) listener,
+    void Function(String groupId, String readerId, String lastReadMessageId) listener,
   ) {
     _groupReadListeners.add(listener);
   }
 
   void removeGroupReadListener(
-    void Function(int groupId, int readerId, int lastReadMessageId) listener,
+    void Function(String groupId, String readerId, String lastReadMessageId) listener,
   ) {
     _groupReadListeners.remove(listener);
   }
@@ -432,15 +432,14 @@ class ChatSocketService {
   }
 }
 
-Iterable<int> _readIds(Object? value) {
+Iterable<String> _readIds(Object? value) {
   if (value is Iterable) {
-    return value.map(_readId).where((id) => id > 0);
+    return value.map(_readId).where((id) => id.isNotEmpty);
   }
   return const [];
 }
 
-int _readId(Object? value) {
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value) ?? 0;
-  return 0;
+String _readId(Object? value) {
+  if (value == null) return '';
+  return value.toString();
 }
