@@ -26,7 +26,7 @@ class MediaDownloadService {
     await FileSaver.instance.saveFile(
       name: name,
       bytes: Uint8List.fromList(response.bodyBytes),
-      ext: ext,
+      fileExtension: ext,
       mimeType: MimeType.jpeg,
     );
   }
