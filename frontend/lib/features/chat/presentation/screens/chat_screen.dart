@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/services/media_download_service.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../users/domain/app_user.dart';
 import '../../domain/chat_message.dart';
@@ -957,6 +958,7 @@ class _MessageContent extends ConsumerWidget {
     final textColor = isMine
         ? Colors.white
         : Theme.of(context).colorScheme.onSurface;
+    final messenger = ScaffoldMessenger.of(context);
     final friend = AppUser(
       id: message.senderId,
       name: '',
@@ -1020,16 +1022,25 @@ class _MessageContent extends ConsumerWidget {
             }
 
             return withReply(
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  '${AppConfig.apiBaseUrl}$imagePath',
-                  width: 220,
-                  height: 220,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      Icon(Icons.broken_image, color: textColor),
-                ),
+              _DownloadableImage(
+                imageUrl: '${AppConfig.apiBaseUrl}$imagePath',
+                textColor: textColor,
+                onDownload: () async {
+                  try {
+                    await const MediaDownloadService().downloadImage(
+                      url: '${AppConfig.apiBaseUrl}$imagePath',
+                    );
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('Image downloaded.')),
+                    );
+                  } catch (_) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to download image.'),
+                      ),
+                    );
+                  }
+                },
               ),
             );
           }
@@ -1056,21 +1067,21 @@ class _MessageContent extends ConsumerWidget {
       final imageUrl =
           message.imageUrl ?? '${AppConfig.apiBaseUrl}${message.content}';
       return withReply(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                imageUrl,
-                width: 220,
-                height: 220,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Icon(Icons.broken_image, color: textColor),
-              ),
-            ),
-          ],
+        _DownloadableImage(
+          imageUrl: imageUrl,
+          textColor: textColor,
+          onDownload: () async {
+            try {
+              await const MediaDownloadService().downloadImage(url: imageUrl);
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Image downloaded.')),
+              );
+            } catch (_) {
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Failed to download image.')),
+              );
+            }
+          },
         ),
       );
     }
@@ -1086,6 +1097,49 @@ class _MessageContent extends ConsumerWidget {
         message.content ?? '',
         style: TextStyle(color: textColor, fontSize: 15),
       ),
+    );
+  }
+}
+
+class _DownloadableImage extends StatelessWidget {
+  const _DownloadableImage({
+    required this.imageUrl,
+    required this.textColor,
+    required this.onDownload,
+  });
+
+  final String imageUrl;
+  final Color textColor;
+  final Future<void> Function() onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            imageUrl,
+            width: 220,
+            height: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                Icon(Icons.broken_image, color: textColor),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            onPressed: onDownload,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+        ),
+      ],
     );
   }
 }
