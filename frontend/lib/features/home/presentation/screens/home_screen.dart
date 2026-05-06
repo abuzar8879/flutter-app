@@ -18,6 +18,24 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedIndex = 0;
+  final List<int> _tabHistory = [0];
+
+  void _selectTab(int index) {
+    if (_selectedIndex == index) return;
+    setState(() {
+      _selectedIndex = index;
+      _tabHistory.remove(index);
+      _tabHistory.add(index);
+    });
+  }
+
+  void _handleBackNavigation() {
+    if (_tabHistory.length <= 1) return;
+    setState(() {
+      _tabHistory.removeLast();
+      _selectedIndex = _tabHistory.last;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,18 +53,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ProfileScreen(),
     ];
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: _BottomNavBar(
-            selectedIndex: _selectedIndex,
-            onSelected: (index) => setState(() => _selectedIndex = index),
+    return PopScope(
+      canPop: _tabHistory.length <= 1,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: pages,
+        ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: _BottomNavBar(
+              selectedIndex: _selectedIndex,
+              onSelected: _selectTab,
+            ),
           ),
         ),
       ),
