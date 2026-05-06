@@ -410,13 +410,18 @@ class _GroupDownloadableImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bubbleColor = isMine
+        ? theme.colorScheme.primary.withOpacity(0.16)
+        : theme.colorScheme.surface;
+
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              color: bubbleColor,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.08),
@@ -425,13 +430,19 @@ class _GroupDownloadableImage extends StatelessWidget {
                 ),
               ],
             ),
-            child: Image.network(
-              imageUrl,
-              width: 220,
-              height: 220,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  Icon(Icons.broken_image, color: textColor),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  width: 220,
+                  height: 220,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      Icon(Icons.broken_image, color: textColor),
+                ),
+              ),
             ),
           ),
         ),
@@ -459,12 +470,24 @@ class _GroupDownloadableImage extends StatelessWidget {
               itemBuilder: (context) => [
                 const PopupMenuItem<String>(
                   value: 'download',
-                  child: Text('Download'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.download_rounded, size: 18),
+                      SizedBox(width: 10),
+                      Text('Download'),
+                    ],
+                  ),
                 ),
-                if (isMine)
+                if (onDelete != null)
                   const PopupMenuItem<String>(
                     value: 'delete',
-                    child: Text('Delete'),
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline_rounded, size: 18),
+                        SizedBox(width: 10),
+                        Text('Delete'),
+                      ],
+                    ),
                   ),
               ],
             ),
