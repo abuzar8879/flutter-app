@@ -103,11 +103,17 @@ class ChatRepository {
     required String token,
     required String receiverId,
     required String imagePath,
+    String? replyToMessageId,
   }) async {
     final json = await _apiClient.postJson(
       '/api/chats/messages',
       token: token,
-      body: {'receiverId': receiverId, 'type': 'image', 'imagePath': imagePath},
+      body: {
+        'receiverId': receiverId,
+        'type': 'image',
+        'imagePath': imagePath,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      },
     );
     return ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
   }

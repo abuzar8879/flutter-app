@@ -86,32 +86,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (session == null) return;
 
     try {
-      final encryptedPayload = await _encryptOutgoing({
-        'type': 'text',
-        'content': text,
-      });
-      if (encryptedPayload == null) return;
-
       ChatMessage? message;
       if (_editingMessage != null) {
         message = await chatNotifier.editMessage(
           messageId: _editingMessage!.id,
-          content: encryptedPayload,
+          content: text,
         );
       } else {
         final socket = ref.read(chatSocketServiceProvider);
         message = await socket?.sendMessage(
           receiverId: widget.friend.id,
-          type: 'encrypted',
-          content: encryptedPayload,
+          type: 'text',
+          content: text,
           replyToMessageId: _replyingTo?.id,
         );
         message ??= await ref
             .read(chatRepositoryProvider)
-            .sendEncryptedMessage(
+            .sendTextMessage(
               token: session.token,
               receiverId: widget.friend.id,
-              content: encryptedPayload,
+              content: text,
               replyToMessageId: _replyingTo?.id,
             );
       }
@@ -172,23 +166,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         fileName: file.name,
         bytes: bytes,
       );
-      final encryptedPayload = await _encryptOutgoing({
-        'type': 'image',
-        'imagePath': imagePath,
-      });
-      if (encryptedPayload == null) return;
-
       final socket = ref.read(chatSocketServiceProvider);
       var message = await socket?.sendMessage(
         receiverId: widget.friend.id,
-        type: 'encrypted',
-        content: encryptedPayload,
+        type: 'image',
+        imagePath: imagePath,
         replyToMessageId: _replyingTo?.id,
       );
-      message ??= await repository.sendEncryptedMessage(
+      message ??= await repository.sendImageMessage(
         token: session.token,
         receiverId: widget.friend.id,
-        content: encryptedPayload,
+        imagePath: imagePath,
         replyToMessageId: _replyingTo?.id,
       );
       chatNotifier.addLocalMessage(message);
@@ -211,33 +199,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         chatNotifier.setSending(false);
       }
     }
-  }
-
-  Future<String?> _encryptOutgoing(Map<String, dynamic> payload) async {
-    final publicKey = widget.friend.publicKey;
-    if (publicKey == null || publicKey.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'This friend needs to open the app once before encrypted chat works.',
-            ),
-          ),
-        );
-      }
-      return null;
-    }
-
-    await ref.read(encryptionBootstrapProvider.future);
-    final session = ref.read(authControllerProvider).session;
-    if (session == null) return null;
-    return ref
-        .read(messageCryptoServiceProvider)
-        .encryptPayload(
-          remotePublicKey: publicKey,
-          payload: payload,
-          scopeKey: session.user.id,
-        );
   }
 
   Future<void> _toggleRecording() async {
