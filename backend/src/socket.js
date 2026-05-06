@@ -173,6 +173,30 @@ function initializeSocket(server) {
       }
     });
 
+    socket.on('delete_group_message', async (payload, callback) => {
+      try {
+        const groupId = String(payload?.groupId ?? '');
+        if (!groupId) throw new Error('groupId is required.');
+        const result = await groupsService.deleteMessage(
+          userId,
+          groupId,
+          payload?.messageId,
+        );
+        const eventPayload = {
+          groupId,
+          ...result,
+        };
+        await emitGroupMessageUpdated(eventPayload, userId);
+        if (typeof callback === 'function') {
+          callback({ ok: true, groupId, ...result });
+        }
+      } catch (error) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, message: error.message });
+        }
+      }
+    });
+
     socket.on('group_typing', (payload) => {
       const groupId = String(payload?.groupId ?? '');
       if (!groupId) return;
@@ -290,9 +314,30 @@ async function emitGroupMessage(result, requesterId = null) {
   }
 }
 
+async function emitGroupMessageUpdated(result, requesterId = null) {
+  if (!activeIo || !result?.message) return;
+  const groupId = String(result.groupId ?? result.message.groupId ?? '');
+  if (!groupId) return;
+
+  activeIo.to(groupRoom(groupId)).emit('group_message_updated', result);
+
+  try {
+    const members = requesterId
+      ? await groupsService.getGroupMembers(String(requesterId), groupId)
+      : [];
+    for (const member of members) {
+      if (member.status !== 'accepted') continue;
+      activeIo.to(userRoom(member.userId)).emit('group_message_updated', result);
+    }
+  } catch (error) {
+    console.error('Failed to emit group message update:', error.message);
+  }
+}
+
 module.exports = {
   emitChatMessage,
   emitChatMessageUpdated,
   emitGroupMessage,
+  emitGroupMessageUpdated,
   initializeSocket,
 };

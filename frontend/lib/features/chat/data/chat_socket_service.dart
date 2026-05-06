@@ -25,6 +25,7 @@ class ChatSocketService {
 
   // Group chat listeners
   final _groupMessageListeners = <void Function(GroupMessage)>[];
+  final _groupMessageUpdatedListeners = <void Function(GroupMessage)>[];
   final _groupTypingListeners =
       <void Function(String userId, String groupId)>[];
   final _groupStopTypingListeners =
@@ -151,6 +152,17 @@ class ChatSocketService {
           Map<String, dynamic>.from(data['message'] as Map),
         );
         for (final listener in _groupMessageListeners) {
+          listener(message);
+        }
+      }
+    });
+
+    socket.on('group_message_updated', (data) {
+      if (data is Map && data['message'] is Map) {
+        final message = GroupMessage.fromJson(
+          Map<String, dynamic>.from(data['message'] as Map),
+        );
+        for (final listener in _groupMessageUpdatedListeners) {
           listener(message);
         }
       }
@@ -358,6 +370,40 @@ class ChatSocketService {
     return completer.future.timeout(const Duration(seconds: 8));
   }
 
+  Future<GroupMessage?> deleteGroupMessage({
+    required String groupId,
+    required String messageId,
+  }) async {
+    final ready = await _ensureConnected();
+    final socket = _socket;
+    if (!ready || socket == null || socket.connected != true) return null;
+
+    final completer = Completer<GroupMessage?>();
+    socket.emitWithAck(
+      'delete_group_message',
+      {'groupId': groupId, 'messageId': messageId},
+      ack: (data) {
+        if (data is Map && data['ok'] == true && data['message'] is Map) {
+          completer.complete(
+            GroupMessage.fromJson(
+              Map<String, dynamic>.from(data['message'] as Map),
+            ),
+          );
+          return;
+        }
+        completer.completeError(
+          Exception(
+            data is Map
+                ? data['message'] ?? 'Message failed.'
+                : 'Message failed.',
+          ),
+        );
+      },
+    );
+
+    return completer.future.timeout(const Duration(seconds: 8));
+  }
+
   void sendTyping(String receiverId, String conversationId) {
     unawaited(
       _ensureConnected().then((ready) {
@@ -510,6 +556,14 @@ class ChatSocketService {
 
   void removeGroupMessageListener(void Function(GroupMessage) listener) {
     _groupMessageListeners.remove(listener);
+  }
+
+  void addGroupMessageUpdatedListener(void Function(GroupMessage) listener) {
+    _groupMessageUpdatedListeners.add(listener);
+  }
+
+  void removeGroupMessageUpdatedListener(void Function(GroupMessage) listener) {
+    _groupMessageUpdatedListeners.remove(listener);
   }
 
   void addGroupTypingListener(

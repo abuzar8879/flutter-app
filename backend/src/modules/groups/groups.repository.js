@@ -151,6 +151,7 @@ async function listGroupsForUser(userId, { limit = 30, offset = 0 } = {}) {
         message_type: last?.type ?? null,
         message_content: last?.content ?? null,
         message_image_path: last?.imagePath ?? null,
+        message_deleted_at: last?.deletedAt ?? null,
         message_created_at: last?.createdAt ?? null,
       }),
     );
@@ -206,11 +207,33 @@ async function createGroupMessage({ groupId, senderId, type, content, imagePath 
     type,
     content: content ?? null,
     imagePath: imagePath ?? null,
+    deletedAt: null,
     createdAt: timestamp,
   };
   await setValue(`/groupMessages/${gid}/${messageId}`, message);
   await updateValue(`/groups/${gid}`, { updatedAt: timestamp });
   return mapGroupMessage(message);
+}
+
+async function findGroupMessage(groupId, messageId) {
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const message = await getValue(`/groupMessages/${gid}/${mid}`);
+  return message ? mapGroupMessage(message) : null;
+}
+
+async function deleteGroupMessage({ groupId, messageId }) {
+  const gid = ensureStringId(String(groupId), 'groupId');
+  const mid = ensureStringId(String(messageId), 'messageId');
+  const timestamp = nowIso();
+  await updateValue(`/groupMessages/${gid}/${mid}`, {
+    content: null,
+    imagePath: null,
+    deletedAt: timestamp,
+  });
+  await updateValue(`/groups/${gid}`, { updatedAt: timestamp });
+  const updated = await getValue(`/groupMessages/${gid}/${mid}`);
+  return updated ? mapGroupMessage(updated) : null;
 }
 
 async function listGroupMessages(groupId, { limit = 50, beforeId } = {}) {
@@ -252,6 +275,8 @@ module.exports = {
   listMembers,
   findGroupById,
   createGroupMessage,
+  findGroupMessage,
+  deleteGroupMessage,
   listGroupMessages,
   markGroupRead,
 };

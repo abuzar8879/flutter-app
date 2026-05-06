@@ -38,9 +38,11 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
   void _setSocket(ChatSocketService? socket) {
     if (_socket == socket) return;
     _socket?.removeGroupMessageListener(_handleGroupMessage);
+    _socket?.removeGroupMessageUpdatedListener(_handleGroupMessage);
     _socket?.removeGroupReadListener(_handleGroupRead);
     _socket = socket;
     _socket?.addGroupMessageListener(_handleGroupMessage);
+    _socket?.addGroupMessageUpdatedListener(_handleGroupMessage);
     _socket?.addGroupReadListener(_handleGroupRead);
   }
 

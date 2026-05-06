@@ -11,6 +11,7 @@ class GroupMessage {
     required this.createdAt,
     this.content,
     this.imagePath,
+    this.deletedAt,
   });
 
   final String id;
@@ -20,8 +21,10 @@ class GroupMessage {
   final String createdAt;
   final String? content;
   final String? imagePath;
+  final String? deletedAt;
 
   DateTime get createdAtDate => _parseDateTime(createdAt);
+  bool get isDeleted => deletedAt != null && deletedAt!.isNotEmpty;
 
   String? get imageUrl => imagePath == null || imagePath!.isEmpty
       ? null
@@ -39,6 +42,7 @@ class GroupMessage {
       },
       content: json['content'] as String?,
       imagePath: json['imagePath'] as String?,
+      deletedAt: json['deletedAt'] as String?,
       createdAt: json['createdAt'] as String? ?? '',
     );
   }

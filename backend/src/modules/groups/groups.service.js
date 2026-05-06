@@ -169,6 +169,26 @@ async function sendMessage(userId, groupId, payload = {}) {
   return { message };
 }
 
+async function deleteMessage(userId, groupId, messageId) {
+  userId = String(userId);
+  groupId = String(groupId);
+  messageId = String(messageId);
+  await _requireAcceptedMember(groupId, userId);
+
+  const message = await groupsRepository.findGroupMessage(groupId, messageId);
+  if (!message) throw new AppError('Message not found.', 404);
+  if (message.senderId !== userId) {
+    throw new AppError('You can only delete your own messages.', 403);
+  }
+  if (message.deletedAt) return { message };
+
+  const updatedMessage = await groupsRepository.deleteGroupMessage({
+    groupId,
+    messageId,
+  });
+  return { message: updatedMessage };
+}
+
 async function markRead(userId, groupId, lastReadMessageId) {
   userId = String(userId);
   groupId = String(groupId);
@@ -197,6 +217,7 @@ module.exports = {
   removeMember,
   getMessages,
   sendMessage,
+  deleteMessage,
   markRead,
   listAcceptedGroupIds,
 };

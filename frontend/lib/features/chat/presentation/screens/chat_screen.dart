@@ -755,6 +755,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   message: message,
                   isMine: isMine,
                   remotePublicKey: widget.friend.publicKey ?? '',
+                  chatPeerId: widget.friend.id,
                   replyPreview: replyTo == null
                       ? null
                       : _messagePreview(replyTo),
@@ -819,13 +820,17 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.remotePublicKey,
+    required this.chatPeerId,
     this.replyPreview,
   });
 
   final ChatMessage message;
   final bool isMine;
   final String remotePublicKey;
+  final String chatPeerId;
   final String? replyPreview;
+
+  bool get _isImageMessage => message.type == ChatMessageType.image;
 
   @override
   Widget build(BuildContext context) {
@@ -843,29 +848,36 @@ class _MessageBubble extends StatelessWidget {
           ),
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: _isImageMessage
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: isMine
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.surface,
+              color: _isImageMessage
+                  ? Colors.transparent
+                  : (isMine
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.surface),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(isMine ? 16 : 4),
                 bottomRight: Radius.circular(isMine ? 4 : 16),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              boxShadow: _isImageMessage
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
             ),
             child: _MessageContent(
               message: message,
               remotePublicKey: remotePublicKey,
               isMine: isMine,
+              chatPeerId: chatPeerId,
               replyPreview: replyPreview,
             ),
           ),
@@ -945,12 +957,14 @@ class _MessageContent extends ConsumerWidget {
     required this.message,
     required this.remotePublicKey,
     required this.isMine,
+    required this.chatPeerId,
     this.replyPreview,
   });
 
   final ChatMessage message;
   final String remotePublicKey;
   final bool isMine;
+  final String chatPeerId;
   final String? replyPreview;
 
   @override
@@ -1025,6 +1039,7 @@ class _MessageContent extends ConsumerWidget {
               _DownloadableImage(
                 imageUrl: '${AppConfig.apiBaseUrl}$imagePath',
                 textColor: textColor,
+                isMine: isMine,
                 onDownload: () async {
                   try {
                     await const MediaDownloadService().downloadImage(
@@ -1041,6 +1056,11 @@ class _MessageContent extends ConsumerWidget {
                     );
                   }
                 },
+                onDelete: isMine
+                    ? () => ref
+                          .read(chatControllerProvider(chatPeerId).notifier)
+                          .deleteMessage(message.id)
+                    : null,
               ),
             );
           }
@@ -1070,6 +1090,7 @@ class _MessageContent extends ConsumerWidget {
         _DownloadableImage(
           imageUrl: imageUrl,
           textColor: textColor,
+          isMine: isMine,
           onDownload: () async {
             try {
               await const MediaDownloadService().downloadImage(url: imageUrl);
@@ -1082,6 +1103,11 @@ class _MessageContent extends ConsumerWidget {
               );
             }
           },
+          onDelete: isMine
+              ? () => ref
+                    .read(chatControllerProvider(chatPeerId).notifier)
+                    .deleteMessage(message.id)
+              : null,
         ),
       );
     }
@@ -1105,38 +1131,77 @@ class _DownloadableImage extends StatelessWidget {
   const _DownloadableImage({
     required this.imageUrl,
     required this.textColor,
+    required this.isMine,
     required this.onDownload,
+    this.onDelete,
   });
 
   final String imageUrl;
   final Color textColor;
+  final bool isMine;
   final Future<void> Function() onDownload;
+  final Future<void> Function()? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            imageUrl,
-            width: 220,
-            height: 220,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
-                Icon(Icons.broken_image, color: textColor),
+          borderRadius: BorderRadius.circular(16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Image.network(
+              imageUrl,
+              width: 220,
+              height: 220,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  Icon(Icons.broken_image, color: textColor),
+            ),
           ),
         ),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            onPressed: onDownload,
-            icon: const Icon(Icons.download_rounded, size: 18),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.45),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: PopupMenuButton<String>(
+              tooltip: 'Image actions',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+              onSelected: (value) async {
+                if (value == 'download') {
+                  await onDownload();
+                }
+                if (value == 'delete' && onDelete != null) {
+                  await onDelete!();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'download',
+                  child: Text('Download'),
+                ),
+                if (isMine)
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

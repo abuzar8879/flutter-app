@@ -211,6 +211,9 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
                     itemBuilder: (context, index) {
                       final message = chatState.messages[index];
                       final isMine = message.senderId == currentUserId;
+                      final isImageBubble =
+                          message.type == GroupMessageType.image &&
+                          !message.isDeleted;
                       final senderName = members.maybeWhen(
                         data: (items) {
                           for (final m in items) {
@@ -228,20 +231,30 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
                             : Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
+                          padding: isImageBubble
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                           decoration: BoxDecoration(
-                            color: isMine
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.surface,
+                            color: isImageBubble
+                                ? Colors.transparent
+                                : (isMine
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.surface),
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: _GroupMessageContent(
                             message: message,
                             isMine: isMine,
                             senderName: senderName,
+                            onDelete: () => ref
+                                .read(
+                                  groupChatControllerProvider(widget.group.id)
+                                      .notifier,
+                                )
+                                .deleteMessage(message.id),
                           ),
                         ),
                       );
@@ -288,11 +301,13 @@ class _GroupMessageContent extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.senderName,
+    required this.onDelete,
   });
 
   final GroupMessage message;
   final bool isMine;
   final String senderName;
+  final Future<void> Function() onDelete;
 
   TextStyle _senderStyle(ThemeData theme, Color textColor) {
     return theme.textTheme.labelSmall?.copyWith(
@@ -314,6 +329,17 @@ class _GroupMessageContent extends StatelessWidget {
     final textColor = isMine ? Colors.white : theme.colorScheme.onSurface;
     final messenger = ScaffoldMessenger.of(context);
 
+    if (message.isDeleted) {
+      return Text(
+        'This message was deleted',
+        style: TextStyle(
+          color: textColor.withOpacity(0.65),
+          fontSize: 15,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
     if (message.type == GroupMessageType.image) {
       final url =
           message.imageUrl ??
@@ -334,6 +360,7 @@ class _GroupMessageContent extends StatelessWidget {
           _GroupDownloadableImage(
             imageUrl: url,
             textColor: textColor,
+            isMine: isMine,
             onDownload: () async {
               try {
                 await const MediaDownloadService().downloadImage(url: url);
@@ -346,6 +373,7 @@ class _GroupMessageContent extends StatelessWidget {
                 );
               }
             },
+            onDelete: isMine ? onDelete : null,
           ),
         ],
       );
@@ -369,38 +397,77 @@ class _GroupDownloadableImage extends StatelessWidget {
   const _GroupDownloadableImage({
     required this.imageUrl,
     required this.textColor,
+    required this.isMine,
     required this.onDownload,
+    this.onDelete,
   });
 
   final String imageUrl;
   final Color textColor;
+  final bool isMine;
   final Future<void> Function() onDownload;
+  final Future<void> Function()? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.network(
-            imageUrl,
-            width: 220,
-            height: 220,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
-                Icon(Icons.broken_image, color: textColor),
+          borderRadius: BorderRadius.circular(16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Image.network(
+              imageUrl,
+              width: 220,
+              height: 220,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  Icon(Icons.broken_image, color: textColor),
+            ),
           ),
         ),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            onPressed: onDownload,
-            icon: const Icon(Icons.download_rounded, size: 18),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.45),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: PopupMenuButton<String>(
+              tooltip: 'Image actions',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+              onSelected: (value) async {
+                if (value == 'download') {
+                  await onDownload();
+                }
+                if (value == 'delete' && onDelete != null) {
+                  await onDelete!();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'download',
+                  child: Text('Download'),
+                ),
+                if (isMine)
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

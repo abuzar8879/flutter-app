@@ -37,6 +37,7 @@ function mapGroupMessage(row) {
     type: row.type,
     content: row.content,
     imagePath: row.imagePath ?? row.image_path ?? null,
+    deletedAt: row.deletedAt ?? row.deleted_at ?? null,
     createdAt: row.createdAt ?? row.created_at ?? null,
   };
 }
@@ -54,11 +55,12 @@ function mapGroupSummary(row) {
           id: String(row.message_id),
           groupId: String(row.id),
           senderId: String(row.message_sender_id),
-          type: row.message_type,
-          content: row.message_content,
-          imagePath: row.message_image_path,
-          createdAt: row.message_created_at,
-        }
+        type: row.message_type,
+        content: row.message_content,
+        imagePath: row.message_image_path,
+        deletedAt: row.message_deleted_at ?? null,
+        createdAt: row.message_created_at,
+      }
       : null,
   };
 }

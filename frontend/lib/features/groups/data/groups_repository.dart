@@ -113,6 +113,18 @@ class GroupsRepository {
     return GroupMessage.fromJson(json['message'] as Map<String, dynamic>);
   }
 
+  Future<GroupMessage> deleteMessage({
+    required String token,
+    required String groupId,
+    required String messageId,
+  }) async {
+    final json = await _apiClient.deleteJson(
+      '/api/groups/$groupId/messages/$messageId',
+      token: token,
+    );
+    return GroupMessage.fromJson(json['message'] as Map<String, dynamic>);
+  }
+
   Future<void> markRead({
     required String token,
     required String groupId,

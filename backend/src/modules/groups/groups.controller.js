@@ -1,6 +1,6 @@
 const path = require('path');
 const groupsService = require('./groups.service');
-const { emitGroupMessage } = require('../../socket');
+const { emitGroupMessage, emitGroupMessageUpdated } = require('../../socket');
 
 async function createGroup(request, response, next) {
   try {
@@ -115,6 +115,26 @@ async function sendMessage(request, response, next) {
   }
 }
 
+async function deleteMessage(request, response, next) {
+  try {
+    const result = await groupsService.deleteMessage(
+      request.user.sub,
+      request.params.groupId,
+      request.params.messageId,
+    );
+    await emitGroupMessageUpdated(
+      {
+        groupId: String(request.params.groupId),
+        ...result,
+      },
+      request.user.sub,
+    );
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function markRead(request, response, next) {
   try {
     const result = await groupsService.markRead(
@@ -146,6 +166,7 @@ module.exports = {
   removeMember,
   getMessages,
   sendMessage,
+  deleteMessage,
   markRead,
   uploadImage,
 };

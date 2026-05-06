@@ -83,6 +83,7 @@ class GroupChatController extends Notifier<GroupChatState> {
   void _attachSocket(ChatSocketService? socket) {
     if (_socket != socket || socket == null) {
       _socket?.removeGroupMessageListener(_onGroupMessage);
+      _socket?.removeGroupMessageUpdatedListener(_onGroupMessageUpdated);
       _socket?.removeGroupTypingListener(_onGroupTyping);
       _socket?.removeGroupStopTypingListener(_onGroupStopTyping);
       _socketListenersAttached = false;
@@ -92,6 +93,7 @@ class GroupChatController extends Notifier<GroupChatState> {
     if (_socket == null || !_loaded || _socketListenersAttached) return;
 
     _socket?.addGroupMessageListener(_onGroupMessage);
+    _socket?.addGroupMessageUpdatedListener(_onGroupMessageUpdated);
     _socket?.addGroupTypingListener(_onGroupTyping);
     _socket?.addGroupStopTypingListener(_onGroupStopTyping);
     unawaited(_socket!.joinGroup(groupId));
@@ -142,6 +144,16 @@ class GroupChatController extends Notifier<GroupChatState> {
     ref.invalidate(groupListProvider);
   }
 
+  void _onGroupMessageUpdated(GroupMessage message) {
+    if (message.groupId != groupId) return;
+    final next = [...state.messages];
+    final index = next.indexWhere((m) => m.id == message.id);
+    if (index == -1) return;
+    next[index] = message;
+    state = state.copyWith(messages: next);
+    ref.invalidate(groupListProvider);
+  }
+
   void _onGroupTyping(String userId, String gId) {
     if (gId != groupId) return;
     final currentUserId = ref.read(authControllerProvider).session?.user.id;
@@ -174,6 +186,26 @@ class GroupChatController extends Notifier<GroupChatState> {
     if (state.messages.any((m) => m.id == message.id)) return;
     state = state.copyWith(messages: [...state.messages, message]);
     ref.invalidate(groupListProvider);
+  }
+
+  Future<GroupMessage?> deleteMessage(String messageId) async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return null;
+
+    final socket = ref.read(chatSocketServiceProvider);
+    var message = await socket?.deleteGroupMessage(
+      groupId: groupId,
+      messageId: messageId,
+    );
+    message ??= await ref
+        .read(groupsRepositoryProvider)
+        .deleteMessage(
+          token: session.token,
+          groupId: groupId,
+          messageId: messageId,
+        );
+    _onGroupMessageUpdated(message);
+    return message;
   }
 
   Future<void> _markLatestAsRead() async {

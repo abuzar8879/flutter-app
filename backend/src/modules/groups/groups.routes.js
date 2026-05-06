@@ -22,6 +22,11 @@ router.delete('/:groupId/members/:userId', authenticate, groupsController.remove
 // Messages
 router.get('/:groupId/messages', authenticate, groupsController.getMessages);
 router.post('/:groupId/messages', authenticate, groupsController.sendMessage);
+router.delete(
+  '/:groupId/messages/:messageId',
+  authenticate,
+  groupsController.deleteMessage,
+);
 router.patch('/:groupId/read', authenticate, groupsController.markRead);
 
 // Upload image
