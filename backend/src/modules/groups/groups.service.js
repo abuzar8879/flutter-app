@@ -2,6 +2,7 @@ const AppError = require('../../utils/app-error');
 const friendsRepository = require('../friends/friends.repository');
 const usersRepository = require('../users/users.repository');
 const groupsRepository = require('./groups.repository');
+const { sendPushNotification } = require('../../config/firebase');
 
 async function createGroup(creatorId, { name, inviteeIds }) {
   creatorId = String(creatorId);
@@ -165,6 +166,34 @@ async function sendMessage(userId, groupId, payload = {}) {
     content,
     imagePath,
   });
+
+  const sender = await usersRepository.findUserById(userId);
+  const group = await groupsRepository.findGroupById(groupId);
+  const members = await groupsRepository.listMembers(groupId);
+
+  await Promise.all(
+    members
+      .filter((member) => member.status === 'accepted' && member.userId !== userId)
+      .map(async (member) => {
+        const receiver = await usersRepository.findUserById(member.userId);
+        if (!receiver?.fcmToken) return;
+
+        await sendPushNotification(
+          receiver.fcmToken,
+          `${sender?.name ?? 'Someone'} in ${group?.name ?? 'Group'}`,
+          type === 'image' ? 'Sent a photo' : 'Sent a message',
+          {
+            targetType: 'group',
+            groupId,
+            groupName: group?.name ?? 'Group',
+            groupCreatedBy: group?.createdBy ?? '',
+            senderId: userId,
+            senderName: sender?.name ?? '',
+            messageType: type,
+          },
+        );
+      }),
+  );
 
   return { message };
 }

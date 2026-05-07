@@ -112,9 +112,15 @@ async function sendMessage(userId, payload) {
       sender ? sender.name : 'New Message',
       type === 'image' ? 'Sent a photo' : type === 'voice' ? 'Sent a voice message' : 'Sent a message',
       {
+        targetType: 'private',
         conversationId: conversation.id.toString(),
         senderId: senderId.toString(),
-        type,
+        friendId: senderId.toString(),
+        friendName: sender?.name ?? '',
+        friendEmail: sender?.email ?? '',
+        friendAvatarPath: sender?.avatarPath ?? '',
+        friendPublicKey: sender?.publicKey ?? '',
+        messageType: type,
       }
     );
   }

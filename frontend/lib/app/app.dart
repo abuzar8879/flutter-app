@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/navigation/app_navigator.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/theme_mode_provider.dart';
 import '../features/chat/presentation/providers/chat_providers.dart';
@@ -39,6 +40,7 @@ class _ChatAppState extends ConsumerState<ChatApp>
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'Chatter',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

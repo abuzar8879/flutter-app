@@ -31,10 +31,16 @@ async function sendPushNotification(fcmToken, title, body, data = {}) {
   if (!isInitialized || !fcmToken) return;
 
   try {
+    const sanitizedData = Object.fromEntries(
+      Object.entries(data)
+        .filter(([, value]) => value != null)
+        .map(([key, value]) => [key, String(value)]),
+    );
+
     await admin.messaging().send({
       token: fcmToken,
       notification: { title, body },
-      data,
+      data: sanitizedData,
     });
   } catch (error) {
     console.error('Failed to send FCM push notification:', error.message);
