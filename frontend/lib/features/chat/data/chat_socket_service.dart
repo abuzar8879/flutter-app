@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../../core/config/app_config.dart';
@@ -51,6 +52,10 @@ class ChatSocketService {
           .setReconnectionAttempts(9999)
           .setReconnectionDelay(800)
           .setReconnectionDelayMax(3500)
+          .setTimeout(10000)
+          .setTransports(
+            kIsWeb ? ['websocket', 'polling'] : ['websocket'],
+          )
           .disableAutoConnect()
           .setAuth({'token': token})
           .build(),
