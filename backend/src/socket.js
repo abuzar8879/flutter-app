@@ -286,7 +286,6 @@ function initializeSocket(server) {
         type: payload?.type ?? 'voice',
       };
       io.to(userRoom(calleeId)).emit('incoming_call', incomingCall);
-      socket.broadcast.emit('incoming_call', incomingCall);
       if (typeof callback === 'function') {
         callback({ ok: true });
       }
@@ -300,7 +299,6 @@ function initializeSocket(server) {
         sdp: payload?.sdp,
       };
       io.to(userRoom(callerId)).emit('call_answered', callAnswer);
-      socket.broadcast.emit('call_answered', callAnswer);
     });
 
     socket.on('call_rejected', (payload) => {
@@ -308,7 +306,6 @@ function initializeSocket(server) {
       if (!callerId) return;
       const rejection = { calleeId: userId };
       io.to(userRoom(callerId)).emit('call_rejected', rejection);
-      socket.broadcast.emit('call_rejected', rejection);
     });
 
     socket.on('call_ended', (payload) => {
@@ -316,7 +313,6 @@ function initializeSocket(server) {
       if (!peerId) return;
       const ended = { peerId: userId };
       io.to(userRoom(peerId)).emit('call_ended', ended);
-      socket.broadcast.emit('call_ended', ended);
     });
 
     socket.on('ice_candidate', (payload) => {
@@ -327,7 +323,6 @@ function initializeSocket(server) {
         candidate: payload.candidate,
       };
       io.to(userRoom(peerId)).emit('ice_candidate', candidate);
-      socket.broadcast.emit('ice_candidate', candidate);
     });
 
     socket.on('disconnect', () => {

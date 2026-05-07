@@ -35,6 +35,7 @@ class ActiveCall {
     bool? isCameraOff,
     bool? isSpeakerOn,
     Map<String, dynamic>? pendingOfferSdp,
+    bool clearPendingOfferSdp = false,
   }) {
     return ActiveCall(
       peerId: peerId ?? this.peerId,
@@ -45,7 +46,9 @@ class ActiveCall {
       isMuted: isMuted ?? this.isMuted,
       isCameraOff: isCameraOff ?? this.isCameraOff,
       isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
-      pendingOfferSdp: pendingOfferSdp ?? this.pendingOfferSdp,
+      pendingOfferSdp: clearPendingOfferSdp
+          ? null
+          : pendingOfferSdp ?? this.pendingOfferSdp,
     );
   }
 }

@@ -5,6 +5,10 @@ class CallSignalingService {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
+  bool _isVideo = false;
+  bool _isSpeakerOn = true;
+  bool _hasRemoteDescription = false;
+  final _pendingRemoteCandidates = <Map<String, dynamic>>[];
 
   final _iceCandidateListeners = <void Function(RTCIceCandidate)>[];
   final _remoteStreamListeners = <void Function(MediaStream)>[];
@@ -22,6 +26,7 @@ class CallSignalingService {
   MediaStream? get remoteStream => _remoteStream;
 
   Future<void> initialize({required bool isVideo}) async {
+    _isVideo = isVideo;
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
@@ -29,17 +34,9 @@ class CallSignalingService {
       });
     } catch (e) {
       if (isVideo) {
-        // Fallback: try audio-only if camera not found
-        try {
-          _localStream = await navigator.mediaDevices.getUserMedia({
-            'audio': true,
-            'video': false,
-          });
-        } catch (_) {
-          throw Exception(
-            'No microphone or camera found. Please connect a device and grant browser permissions.',
-          );
-        }
+        throw Exception(
+          'Camera or microphone not found. Please connect a device and grant camera and microphone permissions.',
+        );
       } else {
         throw Exception(
           'Microphone not found. Please connect a microphone and grant browser permissions.',
@@ -48,6 +45,9 @@ class CallSignalingService {
     }
 
     _peerConnection = await createPeerConnection(_iceConfig);
+    try {
+      await Helper.setSpeakerphoneOn(true);
+    } catch (_) {}
 
     for (final track in _localStream!.getTracks()) {
       await _peerConnection!.addTrack(track, _localStream!);
@@ -78,7 +78,7 @@ class CallSignalingService {
   Future<Map<String, dynamic>> createOffer() async {
     final offer = await _peerConnection!.createOffer({
       'offerToReceiveAudio': true,
-      'offerToReceiveVideo': true,
+      'offerToReceiveVideo': _isVideo,
     });
     await _peerConnection!.setLocalDescription(offer);
     return {'type': offer.type, 'sdp': offer.sdp};
@@ -96,14 +96,26 @@ class CallSignalingService {
       sdpMap['type'] as String?,
     );
     await _peerConnection!.setRemoteDescription(sdp);
+    _hasRemoteDescription = true;
+
+    final pending = List<Map<String, dynamic>>.from(_pendingRemoteCandidates);
+    _pendingRemoteCandidates.clear();
+    for (final candidate in pending) {
+      await addIceCandidate(candidate);
+    }
   }
 
   Future<void> addIceCandidate(Map<String, dynamic> candidateMap) async {
     try {
+      if (!_hasRemoteDescription) {
+        _pendingRemoteCandidates.add(candidateMap);
+        return;
+      }
+      final lineIndex = candidateMap['sdpMLineIndex'];
       final candidate = RTCIceCandidate(
         candidateMap['candidate'] as String?,
         candidateMap['sdpMid'] as String?,
-        candidateMap['sdpMLineIndex'] as int?,
+        lineIndex is int ? lineIndex : int.tryParse('$lineIndex'),
       );
       await _peerConnection?.addCandidate(candidate);
     } catch (_) {}
@@ -114,6 +126,15 @@ class CallSignalingService {
       track.enabled = !muted;
     }
   }
+
+  Future<void> toggleSpeaker() async {
+    _isSpeakerOn = !_isSpeakerOn;
+    try {
+      await Helper.setSpeakerphoneOn(_isSpeakerOn);
+    } catch (_) {}
+  }
+
+  bool get isSpeakerOn => _isSpeakerOn;
 
   void setCameraEnabled(bool enabled) {
     for (final track in _localStream?.getVideoTracks() ?? []) {
@@ -144,6 +165,9 @@ class CallSignalingService {
     _localStream = null;
     _remoteStream = null;
     _peerConnection = null;
+    _isVideo = false;
+    _hasRemoteDescription = false;
+    _pendingRemoteCandidates.clear();
     _iceCandidateListeners.clear();
     _remoteStreamListeners.clear();
     _connectionStateListeners.clear();

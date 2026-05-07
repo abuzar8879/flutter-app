@@ -39,7 +39,14 @@ class ChatSocketService {
 
   // Call signaling listeners
   final _incomingCallListeners =
-      <void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type)>[];
+      <
+        void Function(
+          String callerId,
+          String callerName,
+          Map<String, dynamic> sdp,
+          String type,
+        )
+      >[];
   final _callAnsweredListeners =
       <void Function(String calleeId, Map<String, dynamic> sdp)>[];
   final _callRejectedListeners = <void Function(String calleeId)>[];
@@ -66,9 +73,7 @@ class ChatSocketService {
           .setReconnectionDelay(800)
           .setReconnectionDelayMax(3500)
           .setTimeout(10000)
-          .setTransports(
-            kIsWeb ? ['websocket', 'polling'] : ['websocket'],
-          )
+          .setTransports(kIsWeb ? ['websocket', 'polling'] : ['websocket'])
           .disableAutoConnect()
           .setAuth({'token': token})
           .build(),
@@ -220,6 +225,8 @@ class ChatSocketService {
     // Call signaling events
     socket.on('incoming_call', (data) {
       if (data is Map) {
+        final calleeId = _readId(data['calleeId']);
+        if (calleeId.isNotEmpty && calleeId != currentUserId) return;
         final callerId = _readId(data['callerId']);
         final callerName = _readId(data['callerName']);
         final sdp = data['sdp'] is Map
@@ -244,6 +251,7 @@ class ChatSocketService {
     socket.on('call_answered', (data) {
       if (data is Map) {
         final calleeId = _readId(data['calleeId']);
+        if (calleeId.isEmpty || calleeId == currentUserId) return;
         final sdp = data['sdp'] is Map
             ? Map<String, dynamic>.from(data['sdp'] as Map)
             : <String, dynamic>{};
@@ -256,6 +264,7 @@ class ChatSocketService {
     socket.on('call_rejected', (data) {
       if (data is Map) {
         final calleeId = _readId(data['calleeId']);
+        if (calleeId.isEmpty || calleeId == currentUserId) return;
         for (final l in _callRejectedListeners) {
           l(calleeId);
         }
@@ -265,6 +274,7 @@ class ChatSocketService {
     socket.on('call_ended', (data) {
       if (data is Map) {
         final peerId = _readId(data['peerId']);
+        if (peerId.isEmpty || peerId == currentUserId) return;
         for (final l in _callEndedListeners) {
           l(peerId);
         }
@@ -274,6 +284,7 @@ class ChatSocketService {
     socket.on('ice_candidate', (data) {
       if (data is Map && data['candidate'] is Map) {
         final peerId = _readId(data['peerId']);
+        if (peerId.isEmpty || peerId == currentUserId) return;
         final candidate = Map<String, dynamic>.from(data['candidate'] as Map);
         for (final l in _remoteIceCandidateListeners) {
           l(peerId, candidate);
@@ -764,7 +775,13 @@ class ChatSocketService {
 
   // --------------- Call signaling listener management ---------------
   void addIncomingCallListener(
-    void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type) l,
+    void Function(
+      String callerId,
+      String callerName,
+      Map<String, dynamic> sdp,
+      String type,
+    )
+    l,
   ) {
     if (!_incomingCallListeners.contains(l)) {
       _incomingCallListeners.add(l);
@@ -779,7 +796,13 @@ class ChatSocketService {
   }
 
   void removeIncomingCallListener(
-    void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type) l,
+    void Function(
+      String callerId,
+      String callerName,
+      Map<String, dynamic> sdp,
+      String type,
+    )
+    l,
   ) => _incomingCallListeners.remove(l);
 
   void addCallAnsweredListener(
@@ -799,6 +822,7 @@ class ChatSocketService {
       _callRejectedListeners.add(l);
     }
   }
+
   void removeCallRejectedListener(void Function(String calleeId) l) =>
       _callRejectedListeners.remove(l);
 
@@ -807,6 +831,7 @@ class ChatSocketService {
       _callEndedListeners.add(l);
     }
   }
+
   void removeCallEndedListener(void Function(String peerId) l) =>
       _callEndedListeners.remove(l);
 
@@ -817,6 +842,7 @@ class ChatSocketService {
       _remoteIceCandidateListeners.add(l);
     }
   }
+
   void removeRemoteIceCandidateListener(
     void Function(String peerId, Map<String, dynamic> candidate) l,
   ) => _remoteIceCandidateListeners.remove(l);

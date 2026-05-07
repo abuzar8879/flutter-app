@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -28,11 +30,14 @@ class CallErrorController extends Notifier<String?> {
   }
 }
 
-final callProvider = NotifierProvider<CallNotifier, ActiveCall?>(CallNotifier.new);
+final callProvider = NotifierProvider<CallNotifier, ActiveCall?>(
+  CallNotifier.new,
+);
 
 class CallNotifier extends Notifier<ActiveCall?> {
   CallSignalingService? _signalingService;
   bool _isInitializing = false;
+  Timer? _disconnectGraceTimer;
 
   @override
   ActiveCall? build() {
@@ -50,6 +55,7 @@ class CallNotifier extends Notifier<ActiveCall?> {
         socketSvc.removeCallRejectedListener(_onCallRejected);
         socketSvc.removeCallEndedListener(_onCallEnded);
         socketSvc.removeRemoteIceCandidateListener(_onRemoteIceCandidate);
+        _disconnectGraceTimer?.cancel();
         _signalingService?.dispose();
         _signalingService = null;
       });
@@ -75,10 +81,14 @@ class CallNotifier extends Notifier<ActiveCall?> {
     );
   }
 
-  Future<void> _onCallAnswered(String calleeId, Map<String, dynamic> sdp) async {
+  Future<void> _onCallAnswered(
+    String calleeId,
+    Map<String, dynamic> sdp,
+  ) async {
     final current = state;
     if (current == null || current.peerId != calleeId) return;
     await _signalingService?.setRemoteDescription(sdp);
+    _disconnectGraceTimer?.cancel();
     state = current.copyWith(status: CallStatus.connected);
   }
 
@@ -96,11 +106,16 @@ class CallNotifier extends Notifier<ActiveCall?> {
   }
 
   void _onRemoteIceCandidate(String peerId, Map<String, dynamic> candidate) {
+    final current = state;
+    if (current == null || current.peerId != peerId) return;
     _signalingService?.addIceCandidate(candidate);
   }
 
   // Outgoing call
-  Future<void> startCall({required AppUser peer, required CallType type}) async {
+  Future<void> startCall({
+    required AppUser peer,
+    required CallType type,
+  }) async {
     if (state != null || _isInitializing) return;
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
@@ -133,19 +148,17 @@ class CallNotifier extends Notifier<ActiveCall?> {
     );
 
     svc.addIceCandidateListener((c) {
-      socket.emitIceCandidate(peerId: peer.id, candidate: {
-        'candidate': c.candidate,
-        'sdpMid': c.sdpMid,
-        'sdpMLineIndex': c.sdpMLineIndex,
-      });
+      socket.emitIceCandidate(
+        peerId: peer.id,
+        candidate: {
+          'candidate': c.candidate,
+          'sdpMid': c.sdpMid,
+          'sdpMLineIndex': c.sdpMLineIndex,
+        },
+      );
     });
 
-    svc.addConnectionStateListener((s) {
-      if (s == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        endCall();
-      }
-    });
+    svc.addConnectionStateListener(_handleConnectionState);
 
     final offer = await svc.createOffer();
     await socket.emitCallOffer(
@@ -166,7 +179,11 @@ class CallNotifier extends Notifier<ActiveCall?> {
   // Answer incoming call
   Future<void> answerCall() async {
     final current = state;
-    if (current == null || current.status != CallStatus.ringing || _isInitializing) return;
+    if (current == null ||
+        current.status != CallStatus.ringing ||
+        _isInitializing) {
+      return;
+    }
     final socket = ref.read(chatSocketServiceProvider);
     if (socket == null) return;
 
@@ -191,19 +208,17 @@ class CallNotifier extends Notifier<ActiveCall?> {
     _isInitializing = false;
 
     svc.addIceCandidateListener((c) {
-      socket.emitIceCandidate(peerId: current.peerId, candidate: {
-        'candidate': c.candidate,
-        'sdpMid': c.sdpMid,
-        'sdpMLineIndex': c.sdpMLineIndex,
-      });
+      socket.emitIceCandidate(
+        peerId: current.peerId,
+        candidate: {
+          'candidate': c.candidate,
+          'sdpMid': c.sdpMid,
+          'sdpMLineIndex': c.sdpMLineIndex,
+        },
+      );
     });
 
-    svc.addConnectionStateListener((s) {
-      if (s == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          s == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        endCall();
-      }
-    });
+    svc.addConnectionStateListener(_handleConnectionState);
 
     if (current.pendingOfferSdp != null) {
       await svc.setRemoteDescription(current.pendingOfferSdp!);
@@ -211,12 +226,17 @@ class CallNotifier extends Notifier<ActiveCall?> {
     final answer = await svc.createAnswer();
     socket.emitCallAnswer(callerId: current.peerId, sdp: answer);
 
-    state = current.copyWith(status: CallStatus.connected, pendingOfferSdp: null);
+    _disconnectGraceTimer?.cancel();
+    state = current.copyWith(
+      status: CallStatus.connected,
+      clearPendingOfferSdp: true,
+    );
 
     appNavigatorKey.currentState?.push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: '/call'),
-        builder: (_) => CallScreen(peerName: current.peerName, callType: current.type),
+        builder: (_) =>
+            CallScreen(peerName: current.peerName, callType: current.type),
       ),
     );
   }
@@ -225,7 +245,9 @@ class CallNotifier extends Notifier<ActiveCall?> {
   void rejectCall() {
     final current = state;
     if (current == null) return;
-    ref.read(chatSocketServiceProvider)?.emitCallRejected(callerId: current.peerId);
+    ref
+        .read(chatSocketServiceProvider)
+        ?.emitCallRejected(callerId: current.peerId);
     _cleanup();
   }
 
@@ -255,12 +277,63 @@ class CallNotifier extends Notifier<ActiveCall?> {
     state = current.copyWith(isCameraOff: next);
   }
 
+  Future<void> toggleSpeaker() async {
+    final current = state;
+    if (current == null) return;
+    await _signalingService?.toggleSpeaker();
+    final newSpeakerState = _signalingService?.isSpeakerOn ?? true;
+    state = current.copyWith(isSpeakerOn: newSpeakerState);
+  }
+
   void switchCamera() => _signalingService?.switchCamera();
+
+  void addRemoteStreamListener(void Function(MediaStream) listener) {
+    _signalingService?.addRemoteStreamListener(listener);
+    final remote = _signalingService?.remoteStream;
+    if (remote != null) {
+      listener(remote);
+    }
+  }
 
   MediaStream? get localStream => _signalingService?.localStream;
   MediaStream? get remoteStream => _signalingService?.remoteStream;
 
+  void _handleConnectionState(RTCPeerConnectionState connectionState) {
+    if (connectionState ==
+        RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+      _disconnectGraceTimer?.cancel();
+      final current = state;
+      if (current != null && current.status != CallStatus.connected) {
+        state = current.copyWith(status: CallStatus.connected);
+      }
+      return;
+    }
+
+    if (connectionState ==
+            RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+        connectionState ==
+            RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      endCall();
+      return;
+    }
+
+    if (connectionState ==
+        RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      _disconnectGraceTimer ??= Timer(const Duration(seconds: 30), () {
+        _disconnectGraceTimer = null;
+        if (state != null) {
+          endCall();
+        }
+      });
+    } else {
+      _disconnectGraceTimer?.cancel();
+      _disconnectGraceTimer = null;
+    }
+  }
+
   void _cleanup() {
+    _disconnectGraceTimer?.cancel();
+    _disconnectGraceTimer = null;
     _signalingService?.dispose();
     _signalingService = null;
     state = null;
