@@ -8,9 +8,10 @@ import '../domain/chat_message.dart';
 import '../../groups/domain/group_message.dart';
 
 class ChatSocketService {
-  ChatSocketService({required this.token});
+  ChatSocketService({required this.token, required this.currentUserId});
 
   final String token;
+  final String currentUserId;
   io.Socket? _socket;
 
   final _messageListeners = <void Function(ChatMessage)>[];
@@ -35,6 +36,18 @@ class ChatSocketService {
       <
         void Function(String groupId, String readerId, String lastReadMessageId)
       >[];
+
+  // Call signaling listeners
+  final _incomingCallListeners =
+      <void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type)>[];
+  final _callAnsweredListeners =
+      <void Function(String calleeId, Map<String, dynamic> sdp)>[];
+  final _callRejectedListeners = <void Function(String calleeId)>[];
+  final _callEndedListeners = <void Function(String peerId)>[];
+  final _remoteIceCandidateListeners =
+      <void Function(String peerId, Map<String, dynamic> candidate)>[];
+  _IncomingCallEvent? _pendingIncomingCall;
+
   Completer<void>? _connectedCompleter;
 
   void connect() {
@@ -200,6 +213,70 @@ class ChatSocketService {
         final lastReadMessageId = _readId(data['lastReadMessageId']);
         for (final listener in _groupReadListeners) {
           listener(groupId, readerId, lastReadMessageId);
+        }
+      }
+    });
+
+    // Call signaling events
+    socket.on('incoming_call', (data) {
+      if (data is Map) {
+        final callerId = _readId(data['callerId']);
+        final callerName = _readId(data['callerName']);
+        final sdp = data['sdp'] is Map
+            ? Map<String, dynamic>.from(data['sdp'] as Map)
+            : <String, dynamic>{};
+        final type = _readId(data['type']);
+        if (_incomingCallListeners.isEmpty) {
+          _pendingIncomingCall = _IncomingCallEvent(
+            callerId: callerId,
+            callerName: callerName,
+            sdp: sdp,
+            type: type,
+          );
+          return;
+        }
+        for (final l in _incomingCallListeners) {
+          l(callerId, callerName, sdp, type);
+        }
+      }
+    });
+
+    socket.on('call_answered', (data) {
+      if (data is Map) {
+        final calleeId = _readId(data['calleeId']);
+        final sdp = data['sdp'] is Map
+            ? Map<String, dynamic>.from(data['sdp'] as Map)
+            : <String, dynamic>{};
+        for (final l in _callAnsweredListeners) {
+          l(calleeId, sdp);
+        }
+      }
+    });
+
+    socket.on('call_rejected', (data) {
+      if (data is Map) {
+        final calleeId = _readId(data['calleeId']);
+        for (final l in _callRejectedListeners) {
+          l(calleeId);
+        }
+      }
+    });
+
+    socket.on('call_ended', (data) {
+      if (data is Map) {
+        final peerId = _readId(data['peerId']);
+        for (final l in _callEndedListeners) {
+          l(peerId);
+        }
+      }
+    });
+
+    socket.on('ice_candidate', (data) {
+      if (data is Map && data['candidate'] is Map) {
+        final peerId = _readId(data['peerId']);
+        final candidate = Map<String, dynamic>.from(data['candidate'] as Map);
+        for (final l in _remoteIceCandidateListeners) {
+          l(peerId, candidate);
         }
       }
     });
@@ -609,6 +686,141 @@ class ChatSocketService {
     _groupReadListeners.remove(listener);
   }
 
+  // --------------- Call signaling emitters ---------------
+  Future<bool> emitCallOffer({
+    required String calleeId,
+    required Map<String, dynamic> sdp,
+    required String type,
+    required String callerName,
+  }) async {
+    final ready = await _ensureConnected();
+    final socket = _socket;
+    if (!ready || socket == null || socket.connected != true) return false;
+
+    final completer = Completer<bool>();
+    socket.emitWithAck(
+      'call_offer',
+      {
+        'calleeId': calleeId,
+        'sdp': sdp,
+        'type': type,
+        'callerName': callerName,
+      },
+      ack: (data) {
+        completer.complete(data is Map && data['ok'] == true);
+      },
+    );
+
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => false,
+    );
+  }
+
+  void emitCallAnswer({
+    required String callerId,
+    required Map<String, dynamic> sdp,
+  }) {
+    unawaited(
+      _ensureConnected().then((ready) {
+        if (!ready) return;
+        _socket?.emit('call_answer', {'callerId': callerId, 'sdp': sdp});
+      }),
+    );
+  }
+
+  void emitCallRejected({required String callerId}) {
+    unawaited(
+      _ensureConnected().then((ready) {
+        if (!ready) return;
+        _socket?.emit('call_rejected', {'callerId': callerId});
+      }),
+    );
+  }
+
+  void emitCallEnded({required String peerId}) {
+    unawaited(
+      _ensureConnected().then((ready) {
+        if (!ready) return;
+        _socket?.emit('call_ended', {'peerId': peerId});
+      }),
+    );
+  }
+
+  void emitIceCandidate({
+    required String peerId,
+    required Map<String, dynamic> candidate,
+  }) {
+    unawaited(
+      _ensureConnected().then((ready) {
+        if (!ready) return;
+        _socket?.emit('ice_candidate', {
+          'peerId': peerId,
+          'candidate': candidate,
+        });
+      }),
+    );
+  }
+
+  // --------------- Call signaling listener management ---------------
+  void addIncomingCallListener(
+    void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type) l,
+  ) {
+    if (!_incomingCallListeners.contains(l)) {
+      _incomingCallListeners.add(l);
+    }
+    final pending = _pendingIncomingCall;
+    if (pending != null) {
+      _pendingIncomingCall = null;
+      Future.microtask(() {
+        l(pending.callerId, pending.callerName, pending.sdp, pending.type);
+      });
+    }
+  }
+
+  void removeIncomingCallListener(
+    void Function(String callerId, String callerName, Map<String, dynamic> sdp, String type) l,
+  ) => _incomingCallListeners.remove(l);
+
+  void addCallAnsweredListener(
+    void Function(String calleeId, Map<String, dynamic> sdp) l,
+  ) {
+    if (!_callAnsweredListeners.contains(l)) {
+      _callAnsweredListeners.add(l);
+    }
+  }
+
+  void removeCallAnsweredListener(
+    void Function(String calleeId, Map<String, dynamic> sdp) l,
+  ) => _callAnsweredListeners.remove(l);
+
+  void addCallRejectedListener(void Function(String calleeId) l) {
+    if (!_callRejectedListeners.contains(l)) {
+      _callRejectedListeners.add(l);
+    }
+  }
+  void removeCallRejectedListener(void Function(String calleeId) l) =>
+      _callRejectedListeners.remove(l);
+
+  void addCallEndedListener(void Function(String peerId) l) {
+    if (!_callEndedListeners.contains(l)) {
+      _callEndedListeners.add(l);
+    }
+  }
+  void removeCallEndedListener(void Function(String peerId) l) =>
+      _callEndedListeners.remove(l);
+
+  void addRemoteIceCandidateListener(
+    void Function(String peerId, Map<String, dynamic> candidate) l,
+  ) {
+    if (!_remoteIceCandidateListeners.contains(l)) {
+      _remoteIceCandidateListeners.add(l);
+    }
+  }
+  void removeRemoteIceCandidateListener(
+    void Function(String peerId, Map<String, dynamic> candidate) l,
+  ) => _remoteIceCandidateListeners.remove(l);
+
   void dispose() {
     _socket?.dispose();
     _socket = null;
@@ -622,6 +834,12 @@ class ChatSocketService {
     _groupTypingListeners.clear();
     _groupStopTypingListeners.clear();
     _groupReadListeners.clear();
+    _incomingCallListeners.clear();
+    _callAnsweredListeners.clear();
+    _callRejectedListeners.clear();
+    _callEndedListeners.clear();
+    _remoteIceCandidateListeners.clear();
+    _pendingIncomingCall = null;
   }
 
   void _notifyOnline() {
@@ -630,6 +848,20 @@ class ChatSocketService {
       listener(snapshot);
     }
   }
+}
+
+class _IncomingCallEvent {
+  const _IncomingCallEvent({
+    required this.callerId,
+    required this.callerName,
+    required this.sdp,
+    required this.type,
+  });
+
+  final String callerId;
+  final String callerName;
+  final Map<String, dynamic> sdp;
+  final String type;
 }
 
 Iterable<String> _readIds(Object? value) {

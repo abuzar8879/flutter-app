@@ -259,13 +259,75 @@ function initializeSocket(server) {
       try {
         const groupId = String(payload?.groupId ?? '');
         if (!groupId) throw new Error('groupId is required.');
-        // Will throw if not accepted member
         await groupsService.getGroupMembers(userId, groupId);
         socket.join(groupRoom(groupId));
         if (typeof callback === 'function') callback({ ok: true });
       } catch (error) {
         if (typeof callback === 'function') callback({ ok: false, message: error.message });
       }
+    });
+
+    // -----------------------
+    // Call signaling events
+    // -----------------------
+    socket.on('call_offer', (payload, callback) => {
+      const calleeId = String(payload?.calleeId ?? '');
+      if (!calleeId) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, message: 'calleeId is required.' });
+        }
+        return;
+      }
+      const incomingCall = {
+        calleeId,
+        callerId: userId,
+        callerName: String(payload?.callerName ?? ''),
+        sdp: payload?.sdp,
+        type: payload?.type ?? 'voice',
+      };
+      io.to(userRoom(calleeId)).emit('incoming_call', incomingCall);
+      socket.broadcast.emit('incoming_call', incomingCall);
+      if (typeof callback === 'function') {
+        callback({ ok: true });
+      }
+    });
+
+    socket.on('call_answer', (payload) => {
+      const callerId = String(payload?.callerId ?? '');
+      if (!callerId) return;
+      const callAnswer = {
+        calleeId: userId,
+        sdp: payload?.sdp,
+      };
+      io.to(userRoom(callerId)).emit('call_answered', callAnswer);
+      socket.broadcast.emit('call_answered', callAnswer);
+    });
+
+    socket.on('call_rejected', (payload) => {
+      const callerId = String(payload?.callerId ?? '');
+      if (!callerId) return;
+      const rejection = { calleeId: userId };
+      io.to(userRoom(callerId)).emit('call_rejected', rejection);
+      socket.broadcast.emit('call_rejected', rejection);
+    });
+
+    socket.on('call_ended', (payload) => {
+      const peerId = String(payload?.peerId ?? '');
+      if (!peerId) return;
+      const ended = { peerId: userId };
+      io.to(userRoom(peerId)).emit('call_ended', ended);
+      socket.broadcast.emit('call_ended', ended);
+    });
+
+    socket.on('ice_candidate', (payload) => {
+      const peerId = String(payload?.peerId ?? '');
+      if (!peerId || !payload?.candidate) return;
+      const candidate = {
+        peerId: userId,
+        candidate: payload.candidate,
+      };
+      io.to(userRoom(peerId)).emit('ice_candidate', candidate);
+      socket.broadcast.emit('ice_candidate', candidate);
     });
 
     socket.on('disconnect', () => {

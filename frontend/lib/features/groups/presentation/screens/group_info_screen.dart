@@ -72,7 +72,7 @@ class GroupInfoScreen extends ConsumerWidget {
               ...items.map((m) {
                 final user = m.user;
                 final title = user?.name ?? 'User ${m.userId}';
-                final subtitle = '${m.role}${m.status == 'invited' ? ' • invited' : ''}';
+                final subtitle = '${m.role}${m.status == 'invited' ? ' - invited' : ''}';
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(

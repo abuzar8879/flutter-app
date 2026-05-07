@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/api_client_provider.dart';
-import '../../../../core/storage/secure_token_storage.dart';
 import '../../../../core/storage/token_storage.dart';
+import '../../../../core/storage/token_storage_factory.dart';
 import '../../data/api_auth_repository.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/auth_session.dart';
@@ -17,7 +17,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 final tokenStorageProvider = Provider<TokenStorage>((ref) {
-  return SecureTokenStorage();
+  return createTokenStorage();
 });
 
 final authModeProvider = NotifierProvider<AuthModeController, AuthMode>(

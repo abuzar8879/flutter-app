@@ -18,7 +18,10 @@ final chatSocketServiceProvider = Provider<ChatSocketService?>((ref) {
   final session = ref.watch(authControllerProvider).session;
   if (session == null) return null;
 
-  final service = ChatSocketService(token: session.token)..connect();
+  final service = ChatSocketService(
+    token: session.token,
+    currentUserId: session.user.id,
+  )..connect();
   ref.onDispose(service.dispose);
   return service;
 });

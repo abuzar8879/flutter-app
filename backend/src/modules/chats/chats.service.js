@@ -173,7 +173,20 @@ async function reactToMessage(userId, conversationId, messageId, payload = {}) {
   conversationId = String(conversationId);
   messageId = String(messageId);
   const reaction = typeof payload.reaction === 'string' ? payload.reaction.trim() : '';
-  const allowed = new Set(['👍', '❤️', '😂', '😮', '😢', '🙏']);
+  const allowed = new Set([
+    'Like',
+    'Love',
+    'Funny',
+    'Wow',
+    'Sad',
+    'Thanks',
+    '👍',
+    '❤️',
+    '😂',
+    '😮',
+    '😢',
+    '🙏',
+  ]);
 
   if (reaction && !allowed.has(reaction)) {
     throw new AppError('Unsupported reaction.', 400);

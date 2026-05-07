@@ -10,6 +10,8 @@ import 'package:record/record.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/services/media_download_service.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../calls/domain/call_state.dart';
+import '../../../calls/presentation/providers/call_provider.dart';
 import '../../../users/domain/app_user.dart';
 import '../../domain/chat_message.dart';
 import '../providers/chat_controller.dart';
@@ -276,7 +278,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
-        const reactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+        const reactions = ['Like', 'Love', 'Funny', 'Wow', 'Sad', 'Thanks'];
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -363,6 +365,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_isNearBottom()) _scrollToBottom();
     });
 
+    // Show a SnackBar when a call fails to initialize (e.g. no mic/camera).
+    ref.listen<String?>(callErrorProvider, (_, error) {
+      if (error == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.mic_off_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(error)),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      // Reset error so it doesn't re-show on rebuild.
+      ref.read(callErrorProvider.notifier).clear();
+    });
+
     final currentUserId =
         ref.watch(authControllerProvider).session?.user.id ?? '';
     final chatState = ref.watch(chatControllerProvider(widget.friend.id));
@@ -443,11 +466,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.videocam_rounded),
-            onPressed: isSelf ? null : () {},
+            onPressed: isSelf
+                ? null
+                : () => ref
+                      .read(callProvider.notifier)
+                      .startCall(peer: widget.friend, type: CallType.video),
           ),
           IconButton(
             icon: const Icon(Icons.call_rounded),
-            onPressed: isSelf ? null : () {},
+            onPressed: isSelf
+                ? null
+                : () => ref
+                      .read(callProvider.notifier)
+                      .startCall(peer: widget.friend, type: CallType.voice),
           ),
           const SizedBox(width: 8),
         ],
@@ -900,7 +931,7 @@ class _MessageBubble extends StatelessWidget {
                           vertical: 2,
                         ),
                         child: Text(
-                          reaction,
+                          _reactionLabel(reaction),
                           style: const TextStyle(fontSize: 12),
                         ),
                       ),
@@ -1269,18 +1300,32 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: _toggle,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            _playing
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_fill_rounded,
-            color: widget.color,
-          ),
-          const SizedBox(width: 8),
-          Text('Voice message', style: TextStyle(color: widget.color)),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showLabel = constraints.maxWidth >= 112;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _playing
+                    ? Icons.pause_circle_filled_rounded
+                    : Icons.play_circle_fill_rounded,
+                color: widget.color,
+              ),
+              if (showLabel) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Voice message',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: widget.color),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -1292,6 +1337,25 @@ String _messagePreview(ChatMessage message) {
   if (message.type == ChatMessageType.image) return 'Photo';
   if (message.type == ChatMessageType.encrypted) return 'Encrypted message';
   return message.content ?? 'Message';
+}
+
+String _reactionLabel(String reaction) {
+  switch (reaction) {
+    case '\u{1F44D}':
+      return 'Like';
+    case '\u{2764}\u{FE0F}':
+      return 'Love';
+    case '\u{1F602}':
+      return 'Funny';
+    case '\u{1F62E}':
+      return 'Wow';
+    case '\u{1F622}':
+      return 'Sad';
+    case '\u{1F64F}':
+      return 'Thanks';
+    default:
+      return reaction;
+  }
 }
 
 String _initial(String name) {
