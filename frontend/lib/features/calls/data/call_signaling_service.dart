@@ -54,11 +54,22 @@ class CallSignalingService {
     }
 
     _peerConnection!.onTrack = (event) {
-      if (event.streams.isNotEmpty) {
-        _remoteStream = event.streams.first;
-        for (final l in _remoteStreamListeners) {
-          l(_remoteStream!);
-        }
+      if (event.streams.isEmpty) {
+        return;
+      }
+
+      final stream = event.streams.first;
+      final hasVideoTrack = stream.getVideoTracks().isNotEmpty;
+
+      // Guard against binding audio-only streams to the video renderer,
+      // which can appear as a white/blank remote view.
+      if (event.track.kind != 'video' && !hasVideoTrack) {
+        return;
+      }
+
+      _remoteStream = stream;
+      for (final l in _remoteStreamListeners) {
+        l(_remoteStream!);
       }
     };
 

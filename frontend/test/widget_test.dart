@@ -109,7 +109,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Chatter'), findsOneWidget);
+    expect(find.text('Rabta'), findsOneWidget);
     expect(find.text('Stored User'), findsOneWidget);
     expect(find.text('stored@example.com'), findsOneWidget);
     expect(find.text('Open conversations'), findsOneWidget);

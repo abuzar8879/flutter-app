@@ -19,36 +19,42 @@ class AuthScreen extends ConsumerWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 40.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
                 // Logo or Icon
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.chat_bubble_rounded,
-                    size: 48,
-                    color: theme.colorScheme.primary,
-                  ),
-                ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack).fadeIn(),
-                
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_rounded,
+                        size: 48,
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
+                    .animate()
+                    .scale(duration: 400.ms, curve: Curves.easeOutBack)
+                    .fadeIn(),
+
                 const SizedBox(height: 24),
-                
+
                 Text(
-                  'Chatter',
+                  'Rabta',
                   style: theme.textTheme.displayLarge?.copyWith(
                     color: theme.colorScheme.primary,
                   ),
                 ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
-                
+
                 const SizedBox(height: 8),
-                
+
                 Text(
                   authMode == AuthMode.login
                       ? 'Welcome back! Please enter your details.'
@@ -56,15 +62,17 @@ class AuthScreen extends ConsumerWidget {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium,
                 ).animate().fadeIn(delay: 300.ms),
-                
+
                 const SizedBox(height: 40),
-                
+
                 // Toggle between Login and Signup
                 Container(
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.1),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -72,20 +80,24 @@ class AuthScreen extends ConsumerWidget {
                         child: _AuthModeTab(
                           label: 'Login',
                           isSelected: authMode == AuthMode.login,
-                          onTap: () => ref.read(authModeProvider.notifier).setMode(AuthMode.login),
+                          onTap: () => ref
+                              .read(authModeProvider.notifier)
+                              .setMode(AuthMode.login),
                         ),
                       ),
                       Expanded(
                         child: _AuthModeTab(
                           label: 'Signup',
                           isSelected: authMode == AuthMode.signup,
-                          onTap: () => ref.read(authModeProvider.notifier).setMode(AuthMode.signup),
+                          onTap: () => ref
+                              .read(authModeProvider.notifier)
+                              .setMode(AuthMode.signup),
                         ),
                       ),
                     ],
                   ),
                 ).animate().fadeIn(delay: 400.ms),
-                
+
                 if (authState.errorMessage != null) ...[
                   const SizedBox(height: 24),
                   Container(
@@ -96,26 +108,35 @@ class AuthScreen extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, color: theme.colorScheme.error, size: 20),
+                        Icon(
+                          Icons.error_outline,
+                          color: theme.colorScheme.error,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             authState.errorMessage!,
-                            style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                            style: TextStyle(
+                              color: theme.colorScheme.error,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16),
-                          onPressed: () => ref.read(authControllerProvider.notifier).clearError(),
+                          onPressed: () => ref
+                              .read(authControllerProvider.notifier)
+                              .clearError(),
                           color: theme.colorScheme.error,
                         ),
                       ],
                     ),
                   ).animate().shake(),
                 ],
-                
+
                 const SizedBox(height: 32),
-                
+
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: authMode == AuthMode.login
@@ -159,7 +180,9 @@ class _AuthModeTab extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: isSelected ? Colors.white : theme.colorScheme.onSurface.withOpacity(0.6),
+              color: isSelected
+                  ? Colors.white
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
             ),
           ),
         ),

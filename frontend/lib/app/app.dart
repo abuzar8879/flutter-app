@@ -59,7 +59,7 @@ class _ChatAppState extends ConsumerState<ChatApp> with WidgetsBindingObserver {
 
     return MaterialApp(
       navigatorKey: appNavigatorKey,
-      title: 'Raabta',
+      title: 'Rabta',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

@@ -6,8 +6,8 @@ import '../../../../core/services/push_notification_service.dart';
 import '../../../chat/presentation/providers/chat_providers.dart';
 import '../../../chat/presentation/screens/chat_list_screen.dart';
 import '../../../friends/presentation/screens/my_friends_screen.dart';
-import '../../../friends/presentation/screens/user_discovery_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../status/presentation/screens/status_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -48,7 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     const pages = [
       ChatListScreen(),
-      UserDiscoveryScreen(),
+      StatusScreen(),
       MyFriendsScreen(),
       ProfileScreen(),
     ];
@@ -60,10 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _handleBackNavigation();
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: pages,
-        ),
+        body: IndexedStack(index: _selectedIndex, children: pages),
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
@@ -80,10 +77,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({
-    required this.selectedIndex,
-    required this.onSelected,
-  });
+  const _BottomNavBar({required this.selectedIndex, required this.onSelected});
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -92,10 +86,26 @@ class _BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final items = const [
-      _NavItem(index: 0, icon: Icons.chat_bubble_outline_rounded, activeIcon: Icons.chat_bubble_rounded),
-      _NavItem(index: 1, icon: Icons.person_search_outlined, activeIcon: Icons.person_search_rounded),
-      _NavItem(index: 2, icon: Icons.group_outlined, activeIcon: Icons.group_rounded),
-      _NavItem(index: 3, icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded),
+      _NavItem(
+        index: 0,
+        icon: Icons.chat_bubble_outline_rounded,
+        activeIcon: Icons.chat_bubble_rounded,
+      ),
+      _NavItem(
+        index: 1,
+        icon: Icons.auto_stories_outlined,
+        activeIcon: Icons.auto_stories_rounded,
+      ),
+      _NavItem(
+        index: 2,
+        icon: Icons.group_outlined,
+        activeIcon: Icons.group_rounded,
+      ),
+      _NavItem(
+        index: 3,
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings_rounded,
+      ),
     ];
 
     return Container(
@@ -104,10 +114,10 @@ class _BottomNavBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.35)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -127,7 +137,7 @@ class _BottomNavBar extends StatelessWidget {
                     selected ? item.activeIcon : item.icon,
                     color: selected
                         ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withOpacity(0.45),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.45),
                   ),
                   const SizedBox(height: 6),
                   AnimatedContainer(
@@ -148,7 +158,6 @@ class _BottomNavBar extends StatelessWidget {
     );
   }
 }
-
 
 class _NavItem {
   const _NavItem({

@@ -81,7 +81,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _controlsTimer?.cancel();
     if (!_controlsVisible) setState(() => _controlsVisible = true);
     _controlsTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && widget.callType == CallType.video) {
+      final isConnected =
+          ref.read(callProvider)?.status == CallStatus.connected;
+      if (mounted && widget.callType == CallType.video && isConnected) {
         setState(() => _controlsVisible = false);
       }
     });
@@ -142,8 +144,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       status: isCalling
           ? 'Calling...'
           : isConnected
-              ? _formatDuration(_seconds)
-              : 'Connecting...',
+          ? _formatDuration(_seconds)
+          : 'Connecting...',
       call: call,
       isConnected: isConnected,
       onMute: () => ref.read(callProvider.notifier).toggleMute(),
@@ -224,12 +226,9 @@ class _VoiceCallView extends StatelessWidget {
               Text(
                 status,
                 style: TextStyle(
-                  color: isConnected
-                      ? const Color(0xFF4ade80)
-                      : Colors.white60,
+                  color: isConnected ? const Color(0xFF4ade80) : Colors.white60,
                   fontSize: 16,
-                  fontWeight:
-                      isConnected ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: isConnected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
 
@@ -257,7 +256,9 @@ class _VoiceCallView extends StatelessWidget {
                       icon: call?.isSpeakerOn == false
                           ? Icons.volume_off_rounded
                           : Icons.volume_up_rounded,
-                      label: call?.isSpeakerOn == false ? 'Earpiece' : 'Speaker',
+                      label: call?.isSpeakerOn == false
+                          ? 'Earpiece'
+                          : 'Speaker',
                       active: call?.isSpeakerOn ?? true,
                       onTap: onSpeaker,
                     ),
@@ -303,6 +304,9 @@ class _VideoCallView extends StatelessWidget {
   final VoidCallback onSpeaker;
   final VoidCallback onEnd;
 
+  bool _hasVideoTrack(MediaStream? stream) =>
+      stream?.getVideoTracks().isNotEmpty ?? false;
+
   @override
   Widget build(BuildContext context) {
     final safePadding = MediaQuery.of(context).padding;
@@ -313,11 +317,10 @@ class _VideoCallView extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           // ── Remote video (true full-screen background) ─────────────────
-          remoteRenderer.srcObject != null
+          _hasVideoTrack(remoteRenderer.srcObject)
               ? RTCVideoView(
                   remoteRenderer,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                 )
               : _VideoPlaceholder(peerName: peerName, isConnected: isConnected),
 
@@ -362,13 +365,13 @@ class _VideoCallView extends StatelessWidget {
           ),
 
           // ── Top info bar ────────────────────────────────────────────────
-          AnimatedOpacity(
-            opacity: controlsVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: Positioned(
-              top: safePadding.top + 12,
-              left: 16,
-              right: 16,
+          Positioned(
+            top: safePadding.top + 12,
+            left: 16,
+            right: 16,
+            child: AnimatedOpacity(
+              opacity: controlsVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 300),
               child: Row(
                 children: [
                   Column(
@@ -382,7 +385,7 @@ class _VideoCallView extends StatelessWidget {
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           shadows: [
-                            Shadow(blurRadius: 6, color: Color(0x54000000))
+                            Shadow(blurRadius: 6, color: Color(0x54000000)),
                           ],
                         ),
                       ),
@@ -395,7 +398,7 @@ class _VideoCallView extends StatelessWidget {
                               : Colors.white70,
                           fontSize: 14,
                           shadows: const [
-                            Shadow(blurRadius: 4, color: Color(0x54000000))
+                            Shadow(blurRadius: 4, color: Color(0x54000000)),
                           ],
                         ),
                       ),
@@ -428,79 +431,83 @@ class _VideoCallView extends StatelessWidget {
                           ),
                         ),
                       )
-                    : localRenderer.srcObject != null
-                        ? RTCVideoView(
-                            localRenderer,
-                            mirror: true,
-                            objectFit: RTCVideoViewObjectFit
-                                .RTCVideoViewObjectFitCover,
-                          )
-                        : Container(
-                            color: Colors.grey.shade900,
-                            child: const Center(
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.white38,
-                                size: 36,
-                              ),
-                            ),
+                    : localRenderer.srcObject != null &&
+                          _hasVideoTrack(localRenderer.srcObject)
+                    ? RTCVideoView(
+                        localRenderer,
+                        mirror: true,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      )
+                    : Container(
+                        color: Colors.grey.shade900,
+                        child: const Center(
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white38,
+                            size: 36,
                           ),
+                        ),
+                      ),
               ),
             ),
           ),
 
           // ── Bottom controls ─────────────────────────────────────────────
-          AnimatedOpacity(
-            opacity: controlsVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: Positioned(
-              bottom: safePadding.bottom + 24,
-              left: 0,
-              right: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _ControlButton(
-                        icon: call?.isMuted == true
-                            ? Icons.mic_off_rounded
-                            : Icons.mic_rounded,
-                        label: call?.isMuted == true ? 'Unmute' : 'Mute',
-                        active: call?.isMuted == true,
-                        onTap: onMute,
-                      ),
-                      _ControlButton(
-                        icon: call?.isCameraOff == true
-                            ? Icons.videocam_off_rounded
-                            : Icons.videocam_rounded,
-                        label: call?.isCameraOff == true
-                            ? 'Cam Off'
-                            : 'Camera',
-                        active: call?.isCameraOff == true,
-                        onTap: onCameraToggle,
-                      ),
-                      _EndCallButton(onTap: onEnd),
-                      _ControlButton(
-                        icon: call?.isSpeakerOn == false
-                            ? Icons.volume_off_rounded
-                            : Icons.volume_up_rounded,
-                        label: call?.isSpeakerOn == false
-                            ? 'Earpiece'
-                            : 'Speaker',
-                        active: call?.isSpeakerOn ?? true,
-                        onTap: onSpeaker,
-                      ),
-                      _ControlButton(
-                        icon: Icons.flip_camera_ios_rounded,
-                        label: 'Flip',
-                        active: false,
-                        onTap: onSwitchCamera,
-                      ),
-                    ],
-                  ),
-                ],
+          Positioned(
+            bottom: safePadding.bottom + 24,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !controlsVisible,
+              child: AnimatedOpacity(
+                opacity: controlsVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ControlButton(
+                          icon: call?.isMuted == true
+                              ? Icons.mic_off_rounded
+                              : Icons.mic_rounded,
+                          label: call?.isMuted == true ? 'Unmute' : 'Mute',
+                          active: call?.isMuted == true,
+                          onTap: onMute,
+                        ),
+                        _ControlButton(
+                          icon: call?.isCameraOff == true
+                              ? Icons.videocam_off_rounded
+                              : Icons.videocam_rounded,
+                          label: call?.isCameraOff == true
+                              ? 'Cam Off'
+                              : 'Camera',
+                          active: call?.isCameraOff == true,
+                          onTap: onCameraToggle,
+                        ),
+                        _EndCallButton(onTap: onEnd),
+                        _ControlButton(
+                          icon: call?.isSpeakerOn == false
+                              ? Icons.volume_off_rounded
+                              : Icons.volume_up_rounded,
+                          label: call?.isSpeakerOn == false
+                              ? 'Earpiece'
+                              : 'Speaker',
+                          active: call?.isSpeakerOn ?? true,
+                          onTap: onSpeaker,
+                        ),
+                        _ControlButton(
+                          icon: Icons.flip_camera_ios_rounded,
+                          label: 'Flip',
+                          active: false,
+                          onTap: onSwitchCamera,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -513,8 +520,7 @@ class _VideoCallView extends StatelessWidget {
 // ─── Video Placeholder ───────────────────────────────────────────────────────
 
 class _VideoPlaceholder extends StatelessWidget {
-  const _VideoPlaceholder(
-      {required this.peerName, required this.isConnected});
+  const _VideoPlaceholder({required this.peerName, required this.isConnected});
 
   final String peerName;
   final bool isConnected;
@@ -569,9 +575,10 @@ class _PulsingAvatarState extends State<_PulsingAvatar>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 1.0, end: 1.18).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _pulse = Tween<double>(
+      begin: 1.0,
+      end: 1.18,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -685,7 +692,7 @@ class _ControlButton extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.2),
                         blurRadius: 10,
                         spreadRadius: 2,
-                      )
+                      ),
                     ]
                   : null,
             ),

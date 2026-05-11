@@ -16,11 +16,17 @@ import '../../../users/domain/app_user.dart';
 import '../../domain/chat_message.dart';
 import '../providers/chat_controller.dart';
 import '../providers/chat_providers.dart';
+enum ChatWallpaperStyle { plain, gradient, bubbles }
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({required this.friend, super.key});
+  const ChatScreen({
+    required this.friend,
+    this.wallpaperStyle = ChatWallpaperStyle.plain,
+    super.key,
+  });
 
   final AppUser friend;
+  final ChatWallpaperStyle wallpaperStyle;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -484,9 +490,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.5),
-        ),
+        decoration: _buildBackgroundDecoration(theme),
         child: isSelf
             ? Center(
                 child: Padding(
@@ -528,13 +532,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: Row(
                         children: [
                           Text(
-                            '${widget.friend.name} is typing...',
+                            '${widget.friend.name} is typing',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurface.withOpacity(
                                 0.5,
                               ),
                               fontStyle: FontStyle.italic,
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          _TypingDots(
+                            color: theme.colorScheme.primary,
+                            dotSize: 5,
                           ),
                         ],
                       ),
@@ -546,6 +555,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  BoxDecoration _buildBackgroundDecoration(ThemeData theme) {
+    switch (widget.wallpaperStyle) {
+      case ChatWallpaperStyle.gradient:
+        return BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.primary.withOpacity(0.08),
+              theme.colorScheme.secondary.withOpacity(0.08),
+              theme.colorScheme.surface.withOpacity(0.9),
+            ],
+          ),
+        );
+      case ChatWallpaperStyle.bubbles:
+        return BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(-0.7, -0.8),
+            radius: 1.2,
+            colors: [
+              theme.colorScheme.secondary.withOpacity(0.14),
+              theme.colorScheme.primary.withOpacity(0.08),
+              theme.colorScheme.surface.withOpacity(0.95),
+            ],
+            stops: const [0.0, 0.45, 1.0],
+          ),
+        );
+      case ChatWallpaperStyle.plain:
+        return BoxDecoration(
+          color: theme.colorScheme.surface.withOpacity(0.5),
+        );
+    }
+  }
   Widget _buildInputArea(ThemeData theme, ChatState chatState) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -794,6 +836,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots({
+    required this.color,
+    this.dotSize = 4,
+  });
+
+  final Color color;
+  final double dotSize;
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final activeDot = (_controller.value * 3).floor() % 3;
+        return Row(
+          children: List.generate(3, (index) {
+            final isActive = activeDot == index;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              margin: const EdgeInsets.only(right: 3),
+              width: widget.dotSize,
+              height: widget.dotSize,
+              decoration: BoxDecoration(
+                color: widget.color.withOpacity(isActive ? 0.95 : 0.35),
+                shape: BoxShape.circle,
+              ),
+            );
+          }),
         );
       },
     );

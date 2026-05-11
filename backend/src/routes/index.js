@@ -5,6 +5,7 @@ const friendsRoutes = require('../modules/friends/friends.routes');
 const groupsRoutes = require('../modules/groups/groups.routes');
 const healthRoutes = require('../modules/health/health.routes');
 const profileRoutes = require('../modules/profile/profile.routes');
+const statusesRoutes = require('../modules/statuses/statuses.routes');
 const usersRoutes = require('../modules/users/users.routes');
 
 const router = express.Router();
@@ -14,6 +15,7 @@ router.use('/auth', authRoutes);
 router.use('/chats', chatsRoutes);
 router.use('/groups', groupsRoutes);
 router.use('/profile', profileRoutes);
+router.use('/statuses', statusesRoutes);
 router.use('/users', usersRoutes);
 router.use('/friends', friendsRoutes);
 
